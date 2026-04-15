@@ -2,6 +2,7 @@
 package api
 
 import (
+	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/jsondb"
@@ -17,11 +18,20 @@ type API struct {
 	Sessions    *jsondb.Collection[models.Session]
 	AppRegistry *apps.Registry
 	MCPFactory  *apps.MCPFactory
+	Runners     *airunner.Registry // AI CLI providers (claude, codex, copilot)
+
+	// Store collections.
+	StoreApps  *jsondb.Collection[models.StoreApp]
+	AppShares  *jsondb.Collection[models.AppShare]
+	AppReviews *jsondb.Collection[models.AppReview]
 }
 
 // SetupRouter creates a gin router with all routes mounted.
 func (a *API) SetupRouter() *gin.Engine {
 	r := gin.Default()
+
+	// CORS middleware — allows cross-origin requests from the frontend dev server.
+	r.Use(CORSMiddleware())
 
 	// Health check (no auth).
 	r.GET("/health", func(c *gin.Context) {
@@ -99,6 +109,8 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.POST("/api/agents/tools/:name", a.callTool)
 	authed.GET("/api/agents/sessions", a.listSessions)
 	authed.GET("/api/agents/sessions/:id", a.getSession)
+	authed.GET("/api/agents/providers", a.listProviders)
+	authed.POST("/api/agents/run/sync", a.runAgentREST)
 
 	// Agent WebSocket endpoints (auth via ?token= query param).
 	r.GET("/api/agents/run", a.runAgentWS)
@@ -115,6 +127,41 @@ func (a *API) SetupRouter() *gin.Engine {
 	}
 	r.Any("/mcp", mcpGin)
 	r.Any("/mcp/*path", mcpGin)
+
+	// --- App Store ---
+
+	store := authed.Group("/api/store")
+	store.GET("/apps", a.listStoreApps)
+	store.GET("/apps/:id", a.getStoreApp)
+	store.GET("/categories", a.listCategories)
+	store.GET("/apps/:id/reviews", a.listStoreAppReviews)
+
+	store.POST("/apps/:id/install", a.installStoreApp)
+	store.POST("/apps/:id/reviews", a.submitReview)
+	store.PUT("/apps/:id/reviews", a.submitReview)
+	store.DELETE("/apps/:id/reviews", a.deleteReview)
+
+	myApps := authed.Group("/api/my/apps")
+	myApps.GET("", a.listMyStoreApps)
+	myApps.POST("", a.createStoreApp)
+	myApps.GET("/:id", a.getMyStoreApp)
+	myApps.PUT("/:id", a.updateStoreApp)
+	myApps.DELETE("/:id", a.deleteStoreApp)
+	myApps.POST("/:id/publish", a.publishStoreApp)
+	myApps.PATCH("/:id/visibility", a.setStoreAppVisibility)
+
+	myApps.POST("/:id/share", a.shareStoreApp)
+	myApps.POST("/:id/share-link", a.shareStoreAppLink)
+	myApps.GET("/:id/shares", a.listStoreAppShares)
+	myApps.DELETE("/:id/shares/:shareId", a.deleteStoreAppShare)
+
+	myApps.POST("/:id/tools", a.addStoreTool)
+	myApps.PUT("/:id/tools/:name", a.updateStoreTool)
+	myApps.DELETE("/:id/tools/:name", a.deleteStoreTool)
+
+	myApps.POST("/:id/prompts", a.addStorePrompt)
+	myApps.PUT("/:id/prompts/:name", a.updateStorePrompt)
+	myApps.DELETE("/:id/prompts/:name", a.deleteStorePrompt)
 
 	return r
 }

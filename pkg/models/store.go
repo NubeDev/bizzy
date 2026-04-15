@@ -117,6 +117,21 @@ type AppReview struct {
 
 func (r AppReview) GetID() string { return r.ID }
 
+// --- App Shares ---
+
+// AppShare represents a share invite for a shared-visibility store app.
+type AppShare struct {
+	ID        string     `json:"id"`
+	AppID     string     `json:"appId"`
+	InvitedBy string     `json:"invitedBy"`
+	InviteeID string     `json:"inviteeId,omitempty"`
+	Token     string     `json:"token,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+}
+
+func (s AppShare) GetID() string { return s.ID }
+
 // --- Categories ---
 
 var Categories = []string{

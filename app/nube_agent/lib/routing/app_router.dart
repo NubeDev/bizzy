@@ -10,6 +10,10 @@ import '../features/chat/screens/chat_screen.dart';
 import '../features/qa/screens/qa_screen.dart';
 import '../features/sessions/screens/session_detail_screen.dart';
 import '../features/sessions/screens/sessions_screen.dart';
+import '../features/store/screens/store_screen.dart';
+import '../features/store/screens/store_app_detail_screen.dart';
+import '../features/store/screens/my_apps_screen.dart';
+import '../features/store/screens/store_app_editor_screen.dart';
 import 'app_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -88,7 +92,33 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Branch 2: Admin
+          // Branch 2: Store
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/store',
+                builder: (context, state) => const StoreScreen(),
+              ),
+              GoRoute(
+                path: '/store/:id',
+                builder: (context, state) => StoreAppDetailScreen(
+                  appId: state.pathParameters['id']!,
+                ),
+              ),
+              GoRoute(
+                path: '/my-apps',
+                builder: (context, state) => const MyAppsScreen(),
+              ),
+              GoRoute(
+                path: '/my-apps/:id',
+                builder: (context, state) => StoreAppEditorScreen(
+                  appId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
+          ),
+
+          // Branch 3: Admin
           StatefulShellBranch(
             routes: [
               GoRoute(

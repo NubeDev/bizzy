@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/jsondb"
@@ -75,6 +76,7 @@ func setupEnv(t *testing.T) *testEnv {
 		AppInstalls: appInstalls,
 		AppRegistry: registry,
 		MCPFactory:  mcpFactory,
+		Runners:     airunner.NewRegistry(),
 	}
 
 	router := a.SetupRouter()

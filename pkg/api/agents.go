@@ -26,6 +26,7 @@ type agentTool struct {
 
 // listAgents returns all agents available to the authenticated user.
 // Each installed+enabled app becomes an agent.
+// The registry contains both system apps and store apps, so no fallback is needed.
 func (a *API) listAgents(c *gin.Context) {
 	user := auth.GetUser(c)
 	installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
@@ -38,14 +39,12 @@ func (a *API) listAgents(c *gin.Context) {
 		if !ok {
 			continue
 		}
-
 		agent := agentInfo{
 			Name:        app.Name,
 			Description: app.Description,
 			Version:     app.Version,
 			Tools:       make([]agentTool, 0),
 		}
-
 		if app.HasOpenAPI {
 			agent.Tools = append(agent.Tools, agentTool{
 				Name:        inst.AppName + ".*",
@@ -61,7 +60,6 @@ func (a *API) listAgents(c *gin.Context) {
 				Description: m.Description,
 			})
 		}
-
 		agents = append(agents, agent)
 	}
 

@@ -1,6 +1,0 @@
-{
-  "name": "device_summary",
-  "description": "Get a summary of all devices — total count, online vs offline. Calls the Rubix device API and aggregates the results.",
-  "toolClass": "read-only",
-  "params": {}
-}

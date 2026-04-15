@@ -9,20 +9,21 @@ import (
 
 // Registry holds all available apps loaded from disk.
 type Registry struct {
-	mu      sync.RWMutex
-	appsDir string
-	apps    map[string]*App            // keyed by app name
-	prompts map[string][]Prompt        // keyed by app name
-	tools   map[string][]ToolManifest  // keyed by app name
+	mu       sync.RWMutex
+	appsDirs []string
+	apps     map[string]*App           // keyed by app name
+	prompts  map[string][]Prompt       // keyed by app name
+	tools    map[string][]ToolManifest // keyed by app name
 }
 
-// NewRegistry scans the apps directory and loads all valid apps.
-func NewRegistry(appsDir string) (*Registry, error) {
+// NewRegistry scans the apps directories and loads all valid apps.
+// The first directory is the "primary" used for system app CRUD.
+func NewRegistry(appsDirs ...string) (*Registry, error) {
 	r := &Registry{
-		appsDir: appsDir,
-		apps:    make(map[string]*App),
-		prompts: make(map[string][]Prompt),
-		tools:   make(map[string][]ToolManifest),
+		appsDirs: appsDirs,
+		apps:     make(map[string]*App),
+		prompts:  make(map[string][]Prompt),
+		tools:    make(map[string][]ToolManifest),
 	}
 	if err := r.scan(); err != nil {
 		return nil, err
@@ -31,23 +32,35 @@ func NewRegistry(appsDir string) (*Registry, error) {
 }
 
 func (r *Registry) scan() error {
-	entries, err := os.ReadDir(r.appsDir)
+	for _, dir := range r.appsDirs {
+		r.scanDir(dir)
+	}
+	return nil
+}
+
+func (r *Registry) scanDir(dir string) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("[apps] no apps directory at %s — starting with zero apps", r.appsDir)
-			return nil
+			log.Printf("[apps] no apps directory at %s — skipping", dir)
+			return
 		}
-		return fmt.Errorf("read apps dir: %w", err)
+		log.Printf("[apps] error reading %s: %v", dir, err)
+		return
 	}
 
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		dir := r.appsDir + "/" + e.Name()
-		app, err := LoadApp(dir)
+		appDir := dir + "/" + e.Name()
+		app, err := LoadApp(appDir)
 		if err != nil {
 			log.Printf("[apps] skipping %s: %v", e.Name(), err)
+			continue
+		}
+		// First directory wins on name collisions.
+		if _, exists := r.apps[app.Name]; exists {
 			continue
 		}
 		r.apps[app.Name] = app
@@ -75,45 +88,53 @@ func (r *Registry) scan() error {
 		log.Printf("[apps] loaded: %s v%s (openapi=%v prompts=%d jstools=%d)",
 			app.Name, app.Version, app.HasOpenAPI, len(r.prompts[app.Name]), len(r.tools[app.Name]))
 	}
-	return nil
 }
 
-// Reload re-scans the apps directory. Safe for concurrent use.
+// Reload re-scans the apps directories. Safe for concurrent use.
 func (r *Registry) Reload() error {
 	newApps := make(map[string]*App)
 	newPrompts := make(map[string][]Prompt)
 	newTools := make(map[string][]ToolManifest)
 
-	entries, err := os.ReadDir(r.appsDir)
-	if err != nil {
-		return fmt.Errorf("read apps dir: %w", err)
-	}
-
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		dir := r.appsDir + "/" + e.Name()
-		app, err := LoadApp(dir)
+	for _, dir := range r.appsDirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			log.Printf("[apps] reload: skipping %s: %v", e.Name(), err)
-			continue
-		}
-		newApps[app.Name] = app
-		if app.HasPrompts {
-			prompts, err := LoadPrompts(app)
-			if err != nil {
-				log.Printf("[apps] reload: %s: prompts: %v", app.Name, err)
-			} else {
-				newPrompts[app.Name] = prompts
+			if os.IsNotExist(err) {
+				continue
 			}
+			return fmt.Errorf("read apps dir %s: %w", dir, err)
 		}
-		if app.HasTools {
-			tools, err := LoadToolManifests(app)
+
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			appDir := dir + "/" + e.Name()
+			app, err := LoadApp(appDir)
 			if err != nil {
-				log.Printf("[apps] reload: %s: tools: %v", app.Name, err)
-			} else {
-				newTools[app.Name] = tools
+				log.Printf("[apps] reload: skipping %s: %v", e.Name(), err)
+				continue
+			}
+			// First directory wins.
+			if _, exists := newApps[app.Name]; exists {
+				continue
+			}
+			newApps[app.Name] = app
+			if app.HasPrompts {
+				prompts, err := LoadPrompts(app)
+				if err != nil {
+					log.Printf("[apps] reload: %s: prompts: %v", app.Name, err)
+				} else {
+					newPrompts[app.Name] = prompts
+				}
+			}
+			if app.HasTools {
+				tools, err := LoadToolManifests(app)
+				if err != nil {
+					log.Printf("[apps] reload: %s: tools: %v", app.Name, err)
+				} else {
+					newTools[app.Name] = tools
+				}
 			}
 		}
 	}
@@ -128,8 +149,13 @@ func (r *Registry) Reload() error {
 	return nil
 }
 
-// AppsDir returns the root directory where apps are stored.
-func (r *Registry) AppsDir() string { return r.appsDir }
+// AppsDir returns the primary directory (first) where system apps are stored.
+func (r *Registry) AppsDir() string {
+	if len(r.appsDirs) == 0 {
+		return ""
+	}
+	return r.appsDirs[0]
+}
 
 // List returns all available apps.
 func (r *Registry) List() []*App {

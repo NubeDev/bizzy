@@ -1,11 +1,7 @@
 {
   "mcpServers": {
-    "nube-demo": {
-      "command": "./mcpdemo/bin/mcpdemo",
-      "args": ["--base-url", "http://localhost:9000"]
-    },
     "nube": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "http://localhost:8090/mcp",
       "headers": {
         "Authorization": "Bearer b0a8bd324bc82d2df34f5fa404a56c10302a8037dc1c1e028bbe60b81677d377"

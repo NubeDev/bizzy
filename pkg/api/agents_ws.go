@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/claude"
 	"github.com/NubeDev/bizzy/pkg/models"
@@ -21,8 +22,10 @@ var wsUpgrader = websocket.Upgrader{
 
 // wsRequest is the first message the client sends after connecting.
 type wsRequest struct {
-	Prompt string `json:"prompt"`
-	Agent  string `json:"agent"`
+	Prompt   string `json:"prompt"`
+	Agent    string `json:"agent"`
+	Provider string `json:"provider,omitempty"` // "claude" (default), "codex", "copilot"
+	Model    string `json:"model,omitempty"`    // model override for the chosen provider
 }
 
 // runAgentWS upgrades to WebSocket and runs a Claude session.
@@ -34,38 +37,58 @@ type wsRequest struct {
 //  4. Server streams events:       {"type":"connected|tool_call|text|done","session_id":"ses-..."}
 //  5. Server closes the connection after the "done" event.
 func (a *API) runAgentWS(c *gin.Context) {
-	// Auth via query param (browsers can't set headers on WS upgrade).
-	token := c.Query("token")
-	if token == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "token query parameter required"})
-		return
-	}
+	log.Printf("[agents-ws] new connection from %s", c.Request.RemoteAddr)
 
-	user, ok := a.Users.FindOne(func(u models.User) bool {
-		return u.Token == token
-	})
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-		return
+	// Auth via query param (browsers can't set headers on WS upgrade).
+	// Dev mode: if no token, fall back to first user.
+	var user models.User
+	token := c.Query("token")
+	if token != "" {
+		u, ok := a.Users.FindOne(func(u models.User) bool {
+			return u.Token == token
+		})
+		if !ok {
+			log.Printf("[agents-ws] invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
+		user = u
+	} else {
+		all := a.Users.All()
+		if len(all) == 0 {
+			log.Printf("[agents-ws] no users exist")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users — POST /bootstrap first"})
+			return
+		}
+		user = all[0]
+		log.Printf("[agents-ws] dev mode: using user %s (%s)", user.ID, user.Name)
 	}
 
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("[agents] ws upgrade: %v", err)
+		log.Printf("[agents-ws] upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
+	log.Printf("[agents-ws] upgraded to websocket")
 
 	// Create session and send ID to client immediately.
 	sessionID := models.GenerateID("ses-")
-	conn.WriteJSON(claude.Event{Type: "session", SessionID: sessionID})
+	if err := conn.WriteJSON(claude.Event{Type: "session", SessionID: sessionID}); err != nil {
+		log.Printf("[agents-ws] failed to send session event: %v", err)
+		return
+	}
+	log.Printf("[agents-ws] sent session %s, waiting for prompt...", sessionID)
 
 	// Wait for the run request.
 	var req wsRequest
 	if err := conn.ReadJSON(&req); err != nil {
+		log.Printf("[agents-ws] failed to read request: %v", err)
 		sendWSError(conn, sessionID, "invalid request: "+err.Error())
 		return
 	}
+	log.Printf("[agents-ws] received prompt (%d chars), agent=%q, provider=%q", len(req.Prompt), req.Agent, req.Provider)
+
 	if req.Prompt == "" {
 		sendWSError(conn, sessionID, "prompt is required")
 		return
@@ -79,16 +102,63 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
 
-	result := claude.Run(claude.RunConfig{
-		Prompt:       req.Prompt,
-		MCPURL:       mcpURL,
-		MCPToken:     user.Token,
-		AllowedTools: "mcp__nube__*",
-	}, sessionID, func(ev claude.Event) {
-		if err := conn.WriteJSON(ev); err != nil {
-			log.Printf("[agents] ws write: %v", err)
+	provider := airunner.Provider(req.Provider)
+	if provider == "" {
+		provider = airunner.ProviderClaude
+	}
+	log.Printf("[agents-ws] using provider: %s", provider)
+
+	runner, runnerErr := a.Runners.Get(provider)
+	if runnerErr != nil {
+		log.Printf("[agents-ws] provider error: %v", runnerErr)
+		sendWSError(conn, sessionID, runnerErr.Error())
+		return
+	}
+	if !runner.Available() {
+		log.Printf("[agents-ws] provider %s not available", provider)
+		sendWSError(conn, sessionID, string(provider)+" CLI is not installed or not in PATH")
+		return
+	}
+	log.Printf("[agents-ws] provider %s available, starting run...", provider)
+
+	var result claude.RunResult
+	eventCount := 0
+
+	if provider == airunner.ProviderClaude {
+		result = claude.Run(claude.RunConfig{
+			Prompt:       req.Prompt,
+			MCPURL:       mcpURL,
+			MCPToken:     user.Token,
+			AllowedTools: "mcp__nube__*",
+		}, sessionID, func(ev claude.Event) {
+			eventCount++
+			if ev.Type != "text" {
+				log.Printf("[agents-ws] event #%d: type=%s", eventCount, ev.Type)
+			}
+			if err := conn.WriteJSON(ev); err != nil {
+				log.Printf("[agents-ws] ws write error: %v", err)
+			}
+		})
+		log.Printf("[agents-ws] claude finished: %d events, %dms, $%.4f", eventCount, result.DurationMS, result.CostUSD)
+	} else {
+		// Use the airunner abstraction for codex / copilot.
+		aiResult := runner.Run(airunner.RunConfig{
+			Prompt:       req.Prompt,
+			MCPURL:       mcpURL,
+			MCPToken:     user.Token,
+			AllowedTools: "mcp__nube__*",
+			Model:        req.Model,
+		}, sessionID, func(ev airunner.Event) {
+			if err := conn.WriteJSON(ev); err != nil {
+				log.Printf("[agents] ws write: %v", err)
+			}
+		})
+		result = claude.RunResult{
+			Text:       aiResult.Text,
+			DurationMS: aiResult.DurationMS,
+			CostUSD:    aiResult.CostUSD,
 		}
-	})
+	}
 
 	// Persist session to disk.
 	a.Sessions.Create(models.Session{

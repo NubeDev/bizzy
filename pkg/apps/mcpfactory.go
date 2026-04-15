@@ -65,6 +65,7 @@ func (f *MCPFactory) Rebuild() {
 }
 
 // BuildServer creates an MCP server with tools scoped to the user's installed apps.
+// The registry now contains both system apps and store apps, so no store fallback is needed.
 func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {
 	impl := &mcp.Implementation{Name: "nube-server", Version: "0.1.0"}
 	srv := mcp.NewServer(impl, nil)
@@ -73,22 +74,18 @@ func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {
 		if !install.Enabled {
 			continue
 		}
+
 		app, ok := f.registry.Get(install.AppName)
 		if !ok {
 			continue
 		}
 
-		// Register OpenAPI tools for this app.
 		if app.HasOpenAPI {
 			f.registerOpenAPITools(srv, app, install)
 		}
-
-		// Register JS tools for this app.
 		if app.HasTools {
 			f.registerJSTools(srv, app, install)
 		}
-
-		// Register prompts for this app.
 		f.registerPrompts(srv, app)
 	}
 

@@ -19,21 +19,31 @@ const (
 )
 
 // Middleware returns a gin middleware that resolves bearer tokens to users.
+// In dev mode (no Authorization header), it falls back to the first user in the DB.
 func Middleware(users *jsondb.Collection[models.User]) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid Authorization header"})
-			return
-		}
-		token := strings.TrimPrefix(header, "Bearer ")
 
-		user, ok := users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
+		var user models.User
+		var ok bool
+
+		if strings.HasPrefix(header, "Bearer ") {
+			token := strings.TrimPrefix(header, "Bearer ")
+			user, ok = users.FindOne(func(u models.User) bool {
+				return u.Token == token
+			})
+			if !ok {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				return
+			}
+		} else {
+			// Dev mode: no token provided, use the first user.
+			all := users.All()
+			if len(all) == 0 {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no users exist — POST /bootstrap first"})
+				return
+			}
+			user = all[0]
 		}
 
 		// Store the authenticated user.
