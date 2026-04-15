@@ -1,0 +1,220 @@
+openapi: 3.0.3
+info:
+  title: Nube Device API (Demo)
+  version: 1.0.0
+  description: Fake device management API for testing MCP integration.
+servers:
+  - url: http://localhost:9000
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [system]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /api/v1/devices:
+    get:
+      operationId: listDevices
+      summary: List all devices
+      tags: [devices]
+      responses:
+        '200':
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+                  count:
+                    type: integer
+    post:
+      operationId: createDevice
+      summary: Create a new device
+      tags: [devices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreate'
+      responses:
+        '201':
+          description: Device created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+  /api/v1/devices/{id}:
+    get:
+      operationId: getDevice
+      summary: Get a device by ID
+      tags: [devices]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID (e.g. dev-001)
+      responses:
+        '200':
+          description: Device details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '404':
+          description: Device not found
+    patch:
+      operationId: updateDevice
+      summary: Update a device
+      tags: [devices]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID (e.g. dev-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                ip:
+                  type: string
+      responses:
+        '200':
+          description: Device updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '404':
+          description: Device not found
+  /api/v1/devices/{id}/points:
+    get:
+      operationId: getDevicePoints
+      summary: Get all points for a device
+      tags: [points]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID (e.g. dev-001)
+      responses:
+        '200':
+          description: List of points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Point'
+                  count:
+                    type: integer
+        '404':
+          description: Device not found
+  /api/v1/devices/{id}/points/{pointUuid}:
+    patch:
+      operationId: writePoint
+      summary: Write a value to a point
+      tags: [points]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID (e.g. dev-001)
+        - name: pointUuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Point UUID (e.g. pt-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: number
+                  description: The value to write to the point
+      responses:
+        '200':
+          description: Point updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Point'
+        '404':
+          description: Device or point not found
+components:
+  schemas:
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        model:
+          type: string
+        ip:
+          type: string
+        online:
+          type: boolean
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+    DeviceCreate:
+      type: object
+      required: [name, model]
+      properties:
+        name:
+          type: string
+          description: Human-readable device name
+        model:
+          type: string
+          description: Device model (e.g. RC-5, ZS-1)
+        ip:
+          type: string
+          description: Device IP address
+    Point:
+      type: object
+      properties:
+        uuid:
+          type: string
+        name:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string

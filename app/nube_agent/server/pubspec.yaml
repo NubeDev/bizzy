@@ -1,0 +1,11 @@
+name: nube_agent_server
+description: Dart backend for Nube Agent web — serves Flutter build and proxies API to nube-server.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  shelf: ^1.4.2
+  shelf_proxy: ^1.0.4
+  shelf_static: ^1.1.3

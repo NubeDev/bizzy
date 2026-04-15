@@ -1,0 +1,12 @@
+{
+  "name": "restart_device",
+  "description": "Restart a device by ID. Sends a PATCH to set the device to maintenance mode, then back to active.",
+  "toolClass": "destructive",
+  "params": {
+    "id": {
+      "type": "string",
+      "required": true,
+      "description": "The device ID to restart"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "nube-demo": {
+      "type": "stdio",
+      "command": "./bin/mcpdemo",
+      "args": []
+    }
+  }
+}

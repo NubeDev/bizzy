@@ -1,0 +1,80 @@
+package openapi2mcp
+
+import (
+	"testing"
+
+	"github.com/getkin/kin-openapi/openapi3"
+)
+
+func TestSchemaBasic(t *testing.T) {
+	// TODO: Add tests for schema parsing and validation
+	t.Run("dummy", func(t *testing.T) {
+		t.Log("basic schema test placeholder")
+	})
+}
+
+func TestBuildInputSchema_Basic(t *testing.T) {
+	params := openapi3.Parameters{
+		&openapi3.ParameterRef{Value: &openapi3.Parameter{
+			Name:     "foo",
+			In:       "query",
+			Required: true,
+			Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: typesPtr("string")}},
+		}},
+	}
+	schema := BuildInputSchema(params, nil)
+	if _, ok := schema.Properties["foo"]; !ok {
+		t.Fatalf("expected property 'foo' in schema")
+	}
+	if len(schema.Required) != 1 || schema.Required[0] != "foo" {
+		t.Fatalf("expected 'foo' to be required, got: %v", schema.Required)
+	}
+}
+
+func TestBuildInputSchema_Empty(t *testing.T) {
+	schema := BuildInputSchema(nil, nil)
+	if schema.Properties == nil || len(schema.Properties) != 0 {
+		t.Fatalf("expected empty properties, got: %v", schema.Properties)
+	}
+}
+
+func TestBuildInputSchema_Malformed(t *testing.T) {
+	params := openapi3.Parameters{
+		&openapi3.ParameterRef{Value: nil}, // malformed
+	}
+	schema := BuildInputSchema(params, nil)
+	if schema.Properties == nil || len(schema.Properties) != 0 {
+		t.Fatalf("expected empty properties for malformed param, got: %v", schema.Properties)
+	}
+}
+
+func TestBuildInputSchema_RequiredFromBody(t *testing.T) {
+	body := &openapi3.RequestBodyRef{Value: &openapi3.RequestBody{
+		Required: true,
+		Content: openapi3.Content{
+			"application/json": &openapi3.MediaType{
+				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{
+					Type: typesPtr("object"),
+					Properties: map[string]*openapi3.SchemaRef{
+						"bar": {Value: &openapi3.Schema{Type: typesPtr("integer")}},
+					},
+					Required: []string{"bar"},
+				}},
+			},
+		},
+	}}
+	schema := BuildInputSchema(nil, body)
+	reqBody, ok := schema.Properties["requestBody"]
+	if !ok {
+		t.Fatalf("expected property 'requestBody' in schema")
+	}
+	if _, ok := reqBody.Properties["bar"]; !ok {
+		t.Fatalf("expected property 'bar' in requestBody schema")
+	}
+	if len(reqBody.Required) != 1 || reqBody.Required[0] != "bar" {
+		t.Fatalf("expected 'bar' to be required in requestBody, got: %v", reqBody.Required)
+	}
+	if len(schema.Required) != 1 || schema.Required[0] != "requestBody" {
+		t.Fatalf("expected 'requestBody' to be required, got: %v", schema.Required)
+	}
+}

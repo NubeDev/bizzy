@@ -1,0 +1,31 @@
+name: nube_agent
+description: Nube Agent App — interact with nube-server agents via REST + WebSocket.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  rubix_ui:
+    path: /home/user/code/flutter/rubix-app/packages/rubix_ui
+  flutter_riverpod: ^2.5.1
+  go_router: ^17.1.0
+  dio: ^5.4.3
+  web_socket_channel: ^3.0.0
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.2.3
+  flutter_markdown: ^0.7.0
+  google_fonts: ^8.0.2
+  lucide_icons: ^0.257.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,80 @@
+docs:
+  - id: doc2pdf-usage
+    title: doc2pdf Usage
+    path: docs/pdf-generator/usage.md
+    audience: user
+    summary: End-user guide for running the doc2pdf CLI, including flags, examples, frontmatter, Mermaid setup, page breaks, and troubleshooting.
+    tags:
+      - pdf
+      - markdown
+      - mermaid
+      - cli
+      - usage
+
+  - id: doc2pdf-development
+    title: doc2pdf Development
+    path: docs/pdf-generator/devlopment.md
+    audience: developer
+    summary: Developer guide for maintaining doc2pdf, covering architecture, package layout, dependencies, Mermaid rendering behavior, known limitations, and test workflow.
+    tags:
+      - pdf
+      - markdown
+      - mermaid
+      - cli
+      - development
+
+  - id: fake-plugin-generator-usage
+    title: fake-plugin-generator Usage
+    path: docs/fake-plugin-generator/usage.md
+    audience: user
+    summary: End-user guide for running the fake-plugin-generator TUI, including interactive form navigation, plugin types, output structure, and troubleshooting.
+    tags:
+      - plugin
+      - generator
+      - tui
+      - scaffold
+      - cli
+      - usage
+
+  - id: fake-plugin-generator-development
+    title: fake-plugin-generator Development
+    path: docs/fake-plugin-generator/development.md
+    audience: developer
+    summary: Developer guide for maintaining fake-plugin-generator, covering TUI architecture, Bubble Tea model, package structure, generator logic, refactoring suggestions, and test strategy.
+    tags:
+      - plugin
+      - generator
+      - tui
+      - scaffold
+      - bubbletea
+      - cli
+      - development
+
+  - id: hardware-acbm
+    title: ACBM Gateway
+    path: docs/hardware/acbm.md
+    audience: developer
+    summary: Simple demo hardware spec for the ACBM ESP32-based gateway, covering product role, connectivity, field interfaces, power, software, and expansion options.
+    tags:
+      - hardware
+      - gateway
+      - acbm
+      - esp32
+      - rs485
+      - ethernet
+      - lora
+
+  - id: hardware-io-12
+    title: IO-12 I/O Expansion Module
+    path: docs/hardware/io-12.md
+    audience: developer
+    summary: Hardware specification for IO-12 mixed I/O expansion module with 10 digital inputs, 2 universal inputs (0-10V, 4-20mA, RTD, dry contact), and 2 relay outputs for ACBM side plugin deployment.
+    tags:
+      - hardware
+      - io-controller
+      - io-expansion
+      - acbm
+      - stm32
+      - universal-input
+      - bacnet
+      - rs485

@@ -1,0 +1,57 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Build output
+bin/
+dist/
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Data directory
+data/
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+# Flutter / Dart (apps/nube_agent)
+apps/nube_agent/.dart_tool/
+apps/nube_agent/.packages
+apps/nube_agent/build/
+apps/nube_agent/.flutter-plugins
+apps/nube_agent/.flutter-plugins-dependencies
+apps/nube_agent/pubspec.lock
+apps/nube_agent/.metadata
+apps/nube_agent/android/.gradle/
+apps/nube_agent/android/local.properties
+apps/nube_agent/android/app/src/main/java/io/
+apps/nube_agent/ios/Pods/
+apps/nube_agent/ios/.symlinks/
+apps/nube_agent/linux/flutter/ephemeral/
+apps/nube_agent/macos/Flutter/ephemeral/
+apps/nube_agent/windows/flutter/ephemeral/
+*.iml
