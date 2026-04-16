@@ -36,6 +36,8 @@ func NewJSRuntime(app *App, secrets, config map[string]string, timeout time.Dura
 }
 
 // Execute runs a JS tool script with the given params and returns the JSON result.
+// If a _helpers.js file exists in the same tools/ directory, it is loaded first
+// so all tools in the app share common functions (login, resolveNodeId, etc.).
 func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[string]any, error) {
 	script, err := os.ReadFile(scriptPath)
 	if err != nil {
@@ -50,6 +52,14 @@ func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[strin
 	r.injectConfigAPI(vm)
 	r.injectLogAPI(vm)
 	r.injectFilesAPI(vm)
+
+	// Load shared helpers if _helpers.js exists in the same directory.
+	helpersPath := filepath.Join(filepath.Dir(scriptPath), "_helpers.js")
+	if helpers, err := os.ReadFile(helpersPath); err == nil {
+		if _, err := vm.RunString(string(helpers)); err != nil {
+			return nil, fmt.Errorf("_helpers.js error: %w", err)
+		}
+	}
 
 	// Run the script to define the handle() function.
 	if _, err := vm.RunString(string(script)); err != nil {

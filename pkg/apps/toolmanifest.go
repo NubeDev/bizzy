@@ -14,6 +14,7 @@ type ToolManifest struct {
 	Description string                    `json:"description"`
 	ToolClass   string                    `json:"toolClass"` // read-only, read-write, destructive
 	Mode        string                    `json:"mode,omitempty"` // "" (default) or "qa"
+	QAPrompt    string                    `json:"qa_prompt,omitempty"` // custom MCP prompt body for QA tools (overrides auto-generation)
 	Params      map[string]ToolParamDef   `json:"params"`
 
 	// Set by the loader.
@@ -27,6 +28,7 @@ type ToolParamDef struct {
 	Required    bool   `json:"required"`
 	Description string `json:"description"`
 	Default     any    `json:"default,omitempty"`
+	Order       int    `json:"order,omitempty"` // display/prompt order for QA params (0 = unset, sorted last)
 }
 
 // LoadToolManifests loads all tool.json + .js pairs from an app's tools/ directory.

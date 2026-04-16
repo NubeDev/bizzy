@@ -1,0 +1,29 @@
+name: rubix-developer
+version: 1.0.0
+description: Developer tools and QA wizards for Rubix platform
+author: NubeIO
+
+permissions:
+  allowedHosts:
+    - "*.nubedge.com"
+    - "localhost:*"
+  defaultToolClass: read-write
+  secrets:
+    - rubix_token
+
+settings:
+  - key: rubix_host
+    label: Rubix Host URL
+    type: url
+    required: true
+    default: http://localhost:9000
+  - key: rubix_token
+    label: API Token
+    type: secret
+    required: false
+
+tags:
+  - rubix
+  - development
+
+timeout: 10s

@@ -128,6 +128,14 @@ class ApiClient {
     })
   }
 
+  // Call a tool via the agent API
+  callTool(toolName: string, params: Record<string, unknown>) {
+    return this.request<unknown>(`/api/agents/tools/${toolName}`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
   // Prompts within my app
   addPrompt(appId: string, prompt: StorePrompt) {
     return this.request<StorePrompt>(`/api/my/apps/${appId}/prompts`, {
@@ -144,6 +152,14 @@ class ApiClient {
   deletePrompt(appId: string, name: string) {
     return this.request<void>(`/api/my/apps/${appId}/prompts/${name}`, {
       method: 'DELETE',
+    })
+  }
+
+  // Run a prompt via the agent API
+  runPrompt(prompt: string, provider?: string, model?: string) {
+    return this.request<{ session_id: string; provider: string; text: string; duration_ms: number; cost_usd: number }>('/api/agents/run/sync', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, provider, model }),
     })
   }
 }

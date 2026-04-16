@@ -1,0 +1,17 @@
+{
+  "name": "marketing_plan",
+  "description": "Generate a marketing plan for a NubeIO product or feature. Returns a structured prompt for B2B IoT/building automation buyers.",
+  "toolClass": "read-only",
+  "params": {
+    "product": {
+      "type": "string",
+      "required": true,
+      "description": "The product or feature to market (e.g. Rubix, Nube Edge)"
+    },
+    "audience": {
+      "type": "string",
+      "required": false,
+      "description": "Target audience (defaults to general B2B IoT buyers)"
+    }
+  }
+}

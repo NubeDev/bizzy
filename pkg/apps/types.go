@@ -11,14 +11,16 @@ import (
 
 // App represents a parsed app.yaml — the metadata for an installable app.
 type App struct {
-	Name        string       `yaml:"name" json:"name"`
-	Version     string       `yaml:"version" json:"version"`
-	Description string       `yaml:"description" json:"description"`
-	Author      string       `yaml:"author" json:"author"`
-	Permissions Permissions  `yaml:"permissions" json:"permissions"`
-	Settings    []SettingDef `yaml:"settings" json:"settings"`
-	Tags        []string     `yaml:"tags" json:"tags"`
-	Timeout     string       `yaml:"timeout" json:"timeout"`
+	Name          string          `yaml:"name" json:"name"`
+	Version       string          `yaml:"version" json:"version"`
+	Description   string          `yaml:"description" json:"description"`
+	Author        string          `yaml:"author" json:"author"`
+	Permissions   Permissions     `yaml:"permissions" json:"permissions"`
+	Settings      []SettingDef    `yaml:"settings" json:"settings"`
+	Tags          []string        `yaml:"tags" json:"tags"`
+	Timeout       string          `yaml:"timeout" json:"timeout"`
+	OpenAPIRemote *OpenAPIRemote  `yaml:"openapi" json:"openapi,omitempty"`
+	Preamble      string          `yaml:"preamble" json:"preamble,omitempty"`
 
 	// Populated by the loader, not from YAML.
 	Dir         string `yaml:"-" json:"dir"`
@@ -26,6 +28,14 @@ type App struct {
 	HasPrompts  bool   `yaml:"-" json:"hasPrompts"`
 	HasTools    bool   `yaml:"-" json:"hasTools"`
 	PromptFiles []string `yaml:"-" json:"promptFiles,omitempty"`
+}
+
+// OpenAPIRemote configures fetching an OpenAPI spec from a live server at runtime.
+// The URL supports {{setting_key}} placeholders resolved from the user's install settings.
+type OpenAPIRemote struct {
+	URL         string   `yaml:"url" json:"url"`
+	IncludeTags []string `yaml:"includeTags" json:"includeTags,omitempty"`
+	ExcludeTags []string `yaml:"excludeTags" json:"excludeTags,omitempty"`
 }
 
 // Permissions declares what an app is allowed to do.
@@ -79,7 +89,7 @@ func LoadApp(dir string) (*App, error) {
 	}
 
 	app.Dir = dir
-	app.HasOpenAPI = fileExists(filepath.Join(dir, "openapi.yaml")) || fileExists(filepath.Join(dir, "openapi.json"))
+	app.HasOpenAPI = app.OpenAPIRemote != nil || fileExists(filepath.Join(dir, "openapi.yaml")) || fileExists(filepath.Join(dir, "openapi.json"))
 	app.HasPrompts = dirHasFiles(filepath.Join(dir, "prompts"), ".md")
 	app.HasTools = dirHasFiles(filepath.Join(dir, "tools"), ".js")
 

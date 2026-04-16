@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	openapi2mcp "github.com/NubeIO/openapi-mcp"
@@ -19,8 +22,11 @@ import (
 // MCPFactory builds per-user MCP servers with only the tools from their installed apps.
 type MCPFactory struct {
 	registry *Registry
-	// Cached parsed OpenAPI docs per app name.
+	// Cached parsed OpenAPI docs per app name (static files).
 	specCache map[string]*specData
+	// Cached remote OpenAPI specs with TTL.
+	remoteCache   map[string]*remoteSpecEntry
+	remoteCacheMu sync.RWMutex
 }
 
 type specData struct {
@@ -28,11 +34,19 @@ type specData struct {
 	ops []openapi2mcp.OpenAPIOperation
 }
 
+type remoteSpecEntry struct {
+	data      *specData
+	fetchedAt time.Time
+}
+
+const remoteSpecTTL = 5 * time.Minute
+
 // NewMCPFactory creates a factory that builds per-user MCP servers.
 func NewMCPFactory(registry *Registry) *MCPFactory {
 	f := &MCPFactory{
-		registry:  registry,
-		specCache: make(map[string]*specData),
+		registry:    registry,
+		specCache:   make(map[string]*specData),
+		remoteCache: make(map[string]*remoteSpecEntry),
 	}
 	f.preloadSpecs()
 	return f
@@ -40,8 +54,8 @@ func NewMCPFactory(registry *Registry) *MCPFactory {
 
 func (f *MCPFactory) preloadSpecs() {
 	for _, app := range f.registry.List() {
-		if !app.HasOpenAPI {
-			continue
+		if !app.HasOpenAPI || app.OpenAPIRemote != nil {
+			continue // remote specs are fetched lazily per-user
 		}
 		specPath := app.Dir + "/openapi.yaml"
 		if !fileExists(specPath) {
@@ -61,6 +75,9 @@ func (f *MCPFactory) preloadSpecs() {
 // Rebuild re-caches specs after a registry reload.
 func (f *MCPFactory) Rebuild() {
 	f.specCache = make(map[string]*specData)
+	f.remoteCacheMu.Lock()
+	f.remoteCache = make(map[string]*remoteSpecEntry)
+	f.remoteCacheMu.Unlock()
 	f.preloadSpecs()
 }
 
@@ -93,9 +110,21 @@ func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {
 }
 
 func (f *MCPFactory) registerOpenAPITools(srv *mcp.Server, app *App, install models.AppInstall) {
-	sd, ok := f.specCache[app.Name]
-	if !ok {
-		return
+	var sd *specData
+
+	if app.OpenAPIRemote != nil {
+		// Resolve the remote URL by substituting {{key}} placeholders from settings.
+		resolved := f.resolveRemoteSpec(app, install)
+		if resolved == nil {
+			return
+		}
+		sd = resolved
+	} else {
+		cached, ok := f.specCache[app.Name]
+		if !ok {
+			return
+		}
+		sd = cached
 	}
 
 	// Determine base URL from user's settings.
@@ -128,6 +157,7 @@ func (f *MCPFactory) registerOpenAPITools(srv *mcp.Server, app *App, install mod
 		NameFormat: func(name string) string {
 			return app.Name + "." + name
 		},
+		TagFilter: app.openAPIIncludeTags(),
 		RequestHandler: func(req *http.Request) (*http.Response, error) {
 			// Override the base URL.
 			if baseURL != "" {
@@ -152,6 +182,84 @@ func (f *MCPFactory) registerOpenAPITools(srv *mcp.Server, app *App, install mod
 	}
 
 	openapi2mcp.RegisterOpenAPITools(srv, sd.ops, sd.doc, opts)
+}
+
+// resolveRemoteSpec fetches a remote OpenAPI spec, using a cache with TTL.
+func (f *MCPFactory) resolveRemoteSpec(app *App, install models.AppInstall) *specData {
+	// Resolve {{key}} placeholders in the URL from user settings.
+	url := app.OpenAPIRemote.URL
+	for _, def := range app.Settings {
+		val := install.GetSetting(def.Key)
+		url = strings.ReplaceAll(url, "{{"+def.Key+"}}", val)
+	}
+	if url == "" {
+		return nil
+	}
+
+	cacheKey := app.Name + "|" + url
+
+	// Check cache.
+	f.remoteCacheMu.RLock()
+	entry, ok := f.remoteCache[cacheKey]
+	f.remoteCacheMu.RUnlock()
+	if ok && time.Since(entry.fetchedAt) < remoteSpecTTL {
+		return entry.data
+	}
+
+	// Fetch the spec.
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Printf("[mcpfactory] %s: failed to fetch remote openapi from %s: %v", app.Name, url, err)
+		if entry != nil {
+			return entry.data // serve stale on error
+		}
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[mcpfactory] %s: remote openapi returned %d from %s", app.Name, resp.StatusCode, url)
+		if entry != nil {
+			return entry.data
+		}
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[mcpfactory] %s: failed to read remote openapi body: %v", app.Name, err)
+		if entry != nil {
+			return entry.data
+		}
+		return nil
+	}
+
+	doc, err := openapi2mcp.LoadOpenAPISpecFromBytesLenient(body)
+	if err != nil {
+		log.Printf("[mcpfactory] %s: failed to parse remote openapi: %v", app.Name, err)
+		if entry != nil {
+			return entry.data
+		}
+		return nil
+	}
+
+	ops := openapi2mcp.ExtractOpenAPIOperations(doc)
+
+	sd := &specData{doc: doc, ops: ops}
+	f.remoteCacheMu.Lock()
+	f.remoteCache[cacheKey] = &remoteSpecEntry{data: sd, fetchedAt: time.Now()}
+	f.remoteCacheMu.Unlock()
+
+	log.Printf("[mcpfactory] %s: fetched remote openapi from %s (%d operations)", app.Name, url, len(ops))
+	return sd
+}
+
+// openAPIIncludeTags returns the tag filter from OpenAPIRemote config, or nil.
+func (app *App) openAPIIncludeTags() []string {
+	if app.OpenAPIRemote == nil {
+		return nil
+	}
+	return app.OpenAPIRemote.IncludeTags
 }
 
 func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.AppInstall) {
@@ -216,6 +324,12 @@ func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.A
 				Content: []mcp.Content{&mcp.TextContent{Text: string(text)}},
 			}, nil
 		})
+
+		// Auto-register an MCP prompt for QA-mode tools so Claude can
+		// drive the wizard conversationally.
+		if manifest.Mode == "qa" {
+			f.registerQAPrompt(srv, app, manifest)
+		}
 	}
 }
 
@@ -252,6 +366,80 @@ func buildToolSchema(m ToolManifest) jsonschema.Schema {
 	return schema
 }
 
+// registerQAPrompt auto-generates an MCP prompt for a QA-mode tool so that
+// Claude (or any MCP client) can drive the wizard conversationally — asking
+// the user each question one at a time, then calling the tool with all answers.
+func (f *MCPFactory) registerQAPrompt(srv *mcp.Server, app *App, manifest ToolManifest) {
+	namespacedTool := app.Name + "." + manifest.Name
+	promptName := namespacedTool // same name, registered as prompt
+
+	// Collect user-facing params (skip internal fields like _submit, _answers),
+	// sorted by the "order" field so the prompt asks questions in the right sequence.
+	type paramEntry struct {
+		name  string
+		desc  string
+		order int
+	}
+	var params []paramEntry
+	for name, def := range manifest.Params {
+		if strings.HasPrefix(name, "_") {
+			continue
+		}
+		params = append(params, paramEntry{name: name, desc: def.Description, order: def.Order})
+	}
+	sort.Slice(params, func(i, j int) bool {
+		oi, oj := params[i].order, params[j].order
+		if oi == 0 {
+			oi = 1<<31 - 1 // unset order sorts last
+		}
+		if oj == 0 {
+			oj = 1<<31 - 1
+		}
+		return oi < oj
+	})
+
+	var promptBody string
+
+	if manifest.QAPrompt != "" {
+		// Use the custom prompt template, replacing {{tool}} with the namespaced tool name.
+		promptBody = strings.ReplaceAll(manifest.QAPrompt, "{{tool}}", namespacedTool)
+	} else {
+		// Auto-generate a conversational QA prompt.
+		var b strings.Builder
+		b.WriteString("You are running the \"" + manifest.Description + "\" wizard.\n\n")
+		b.WriteString("You are a conversational assistant inside a chat interface (such as Claude Code in VS Code).\n")
+		b.WriteString("There is no popup or form UI — you must drive the entire Q&A through chat messages.\n\n")
+		b.WriteString("Ask the user the following questions ONE AT A TIME. Wait for each answer before asking the next.\n")
+		b.WriteString("Keep your questions short and friendly. Present options clearly when available.\n\n")
+		for i, p := range params {
+			b.WriteString(fmt.Sprintf("%d. **%s** — %s\n", i+1, p.name, p.desc))
+		}
+		b.WriteString("\nOnce you have all answers, call the tool `" + namespacedTool + "` with `_submit` set to `true` and all collected answers as parameters.\n")
+		b.WriteString("Present the result to the user in a clear, friendly format using markdown.\n")
+		b.WriteString("If the result contains a follow-up question or quiz (e.g. multiple choice options), present it to the user, wait for their answer, then call the tool again with the additional answer included.\n")
+		promptBody = b.String()
+	}
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        promptName,
+		Description: manifest.Description,
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return &mcp.GetPromptResult{
+			Description: manifest.Description,
+			Messages: []*mcp.PromptMessage{
+				{
+					Role: "user",
+					Content: &mcp.TextContent{
+						Text: promptBody,
+					},
+				},
+			},
+		}, nil
+	})
+
+	log.Printf("[mcpfactory] %s: auto-registered QA prompt for tool %s", app.Name, manifest.Name)
+}
+
 func (f *MCPFactory) registerPrompts(srv *mcp.Server, app *App) {
 	prompts := f.registry.GetPrompts(app.Name)
 	for _, p := range prompts {
@@ -277,6 +465,10 @@ func (f *MCPFactory) registerPrompts(srv *mcp.Server, app *App) {
 			body := prompt.Body
 			for k, v := range req.Params.Arguments {
 				body = strings.ReplaceAll(body, "{{"+k+"}}", v)
+			}
+			// Prepend app-level preamble (auth, context, common instructions).
+			if app.Preamble != "" {
+				body = app.Preamble + "\n\n---\n\n" + body
 			}
 			return &mcp.GetPromptResult{
 				Description: prompt.Description,

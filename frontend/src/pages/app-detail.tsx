@@ -1,6 +1,9 @@
 import { useState } from "react"
 import { useParams, Link } from "react-router-dom"
-import { ArrowLeft, Download, Wrench, MessageSquare, Check, Loader2 } from "lucide-react"
+import { ArrowLeft, Download, Wrench, MessageSquare, Check, Loader2, Play } from "lucide-react"
+import { ToolRunner } from "@/components/store/tool-runner"
+import { PromptRunner } from "@/components/store/prompt-runner"
+import { QaWizard } from "@/components/store/qa-wizard"
 import { useStoreApp, useAppReviews, useInstallApp, useSubmitReview } from "@/hooks/use-store"
 import { RatingStars, RatingInput } from "@/components/store/rating-stars"
 import { categoryLabel, formatDate } from "@/lib/utils"
@@ -18,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { SettingDef } from "@/lib/types"
+import type { SettingDef, StoreApp } from "@/lib/types"
 
 export function AppDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -157,28 +160,13 @@ export function AppDetailPage() {
         </TabsContent>
 
         <TabsContent value="tools" className="space-y-3 mt-6">
-          {app.tools?.length > 0 && (
-            <>
-              <h3 className="text-sm font-medium flex items-center gap-1.5"><Wrench size={14} /> Tools</h3>
-              {app.tools.map((tool) => (
-                <div key={tool.name} className="rounded-none border border-border bg-card p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <code className="text-sm font-medium font-mono">{tool.name}</code>
-                      <Badge variant="secondary" className="text-[10px] rounded-none font-mono">{tool.toolClass}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{tool.description}</p>
-                </div>
-              ))}
-            </>
-          )}
+          <QaToolsSection app={app} installed={installed} />
+          <RegularToolsSection app={app} installed={installed} />
           {app.prompts?.length > 0 && (
             <>
               <h3 className="text-sm font-medium flex items-center gap-1.5 mt-4"><MessageSquare size={14} /> Prompts</h3>
               {app.prompts.map((prompt) => (
-                <div key={prompt.name} className="rounded-none border border-border bg-card p-4">
-                    <code className="text-sm font-medium font-mono">{prompt.name}</code>
-                    <p className="text-xs text-muted-foreground mt-1">{prompt.description}</p>
-                </div>
+                <PromptRunner key={prompt.name} appName={app.name} prompt={prompt} installed={installed} />
               ))}
             </>
           )}
@@ -218,5 +206,63 @@ export function AppDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+// --- QA Tools: show wizard launch buttons ---
+
+function QaToolsSection({ app, installed }: { app: StoreApp; installed: boolean }) {
+  const [activeFlow, setActiveFlow] = useState<string | null>(null)
+  const qaTools = app.tools?.filter(t => t.mode === "qa") || []
+  if (qaTools.length === 0) return null
+
+  return (
+    <>
+      <h3 className="text-sm font-medium flex items-center gap-1.5"><Play size={14} /> Interactive Tools</h3>
+      {qaTools.map(tool => (
+        <div key={tool.name} className="border border-border bg-card">
+          {activeFlow === `${app.name}.${tool.name}` ? (
+            <div className="p-4">
+              <QaWizard
+                flow={`${app.name}.${tool.name}`}
+                title={tool.name.replace(/_/g, " ")}
+                onClose={() => setActiveFlow(null)}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-4">
+              <div className="flex-1 min-w-0">
+                <code className="text-sm font-medium font-mono">{tool.name}</code>
+                <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
+              </div>
+              <Button
+                size="sm"
+                className="rounded-none font-mono text-xs uppercase tracking-wider shrink-0"
+                disabled={!installed}
+                onClick={() => setActiveFlow(`${app.name}.${tool.name}`)}
+              >
+                <Play size={12} className="mr-1" /> Start
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  )
+}
+
+// --- Regular Tools: keep the expandable ToolRunner ---
+
+function RegularToolsSection({ app, installed }: { app: StoreApp; installed: boolean }) {
+  const regularTools = app.tools?.filter(t => t.mode !== "qa") || []
+  if (regularTools.length === 0) return null
+
+  return (
+    <>
+      <h3 className="text-sm font-medium flex items-center gap-1.5"><Wrench size={14} /> Tools</h3>
+      {regularTools.map(tool => (
+        <ToolRunner key={tool.name} appName={app.name} tool={tool} installed={installed} />
+      ))}
+    </>
   )
 }

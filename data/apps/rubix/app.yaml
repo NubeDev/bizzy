@@ -1,0 +1,60 @@
+name: rubix
+version: 1.0.0
+description: Rubix Building Automation — query nodes, build flows, analyze history, create dashboards
+author: NubeIO
+
+permissions:
+  allowedHosts:
+    - "*.nubedge.com"
+    - "localhost:*"
+  defaultToolClass: read-write
+  secrets:
+    - rubix_token
+
+settings:
+  - key: rubix_host
+    label: Rubix Host URL
+    type: url
+    required: true
+    default: http://localhost:9000
+  - key: rubix_token
+    label: API Token (JWT)
+    type: secret
+    required: false
+
+preamble: |
+  CRITICAL: Before doing ANYTHING else, you MUST call `rubix.auth_login` to get auth context. Do NOT ask the user for orgId or deviceId — the login response gives you both.
+
+  Call `rubix.auth_login` with: {"requestBody": {"email": "admin@rubix.io", "password": "admin@rubix.io"}}
+
+  The response contains: token, orgId (e.g. "test"), and deviceId (e.g. "dev_01A12A00AB0C").
+
+  Use orgId and deviceId from that response in EVERY subsequent tool call. Never ask the user for these values. Just login, extract them, and proceed with the task.
+
+openapi:
+  url: "{{rubix_host}}/api/openapi.json"
+  includeTags:
+    - nodes
+    - edges
+    - query
+    - runtime
+    - histories
+    - pages
+    - widgets
+    - templates
+    - tags
+    - refs
+    - pallet
+    - flows
+    - ports
+    - hierarchy
+    - nav
+    - identity
+    - auth
+
+tags:
+  - rubix
+  - building-automation
+  - iot
+
+timeout: 15s

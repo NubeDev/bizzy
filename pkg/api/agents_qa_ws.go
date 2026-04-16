@@ -71,14 +71,24 @@ type qaEvent struct {
 // 10. Server closes connection.
 func (a *API) runQAWS(c *gin.Context) {
 	token := c.Query("token")
-	if token == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "token query parameter required"})
-		return
-	}
 
-	user, ok := a.Users.FindOne(func(u models.User) bool {
-		return u.Token == token
-	})
+	var user models.User
+	var ok bool
+
+	if token == "" || token == "dev" {
+		// Dev mode: use the first user (same as REST auth middleware).
+		all := a.Users.All()
+		if len(all) == 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users exist"})
+			return
+		}
+		user = all[0]
+		ok = true
+	} else {
+		user, ok = a.Users.FindOne(func(u models.User) bool {
+			return u.Token == token
+		})
+	}
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
@@ -207,6 +217,26 @@ func (a *API) runQAWS(c *gin.Context) {
 				CreatedAt:  time.Now().UTC(),
 			})
 
+			conn.WriteMessage(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+			)
+			return
+
+		case "result":
+			// Tool returned a final result (no Claude streaming needed).
+			// Send it directly to the client as a "text" event with the JSON,
+			// then close cleanly.
+			resultJSON, _ := json.Marshal(result)
+			conn.WriteJSON(qaEvent{
+				Type:      "text",
+				SessionID: sessionID,
+				Content:   string(resultJSON),
+			})
+			conn.WriteJSON(qaEvent{
+				Type:      "done",
+				SessionID: sessionID,
+			})
 			conn.WriteMessage(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),

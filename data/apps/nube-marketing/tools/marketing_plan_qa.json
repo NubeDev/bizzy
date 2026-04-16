@@ -1,0 +1,49 @@
+{
+  "name": "marketing_plan_qa",
+  "description": "Guided marketing plan builder — collects requirements then generates a plan.",
+  "toolClass": "read-only",
+  "mode": "qa",
+  "params": {
+    "_submit": {
+      "type": "boolean",
+      "required": false,
+      "description": "Set to true when submitting answers. Omit to get the form definition."
+    },
+    "product": {
+      "type": "string",
+      "required": false,
+      "description": "Product or feature name",
+      "order": 1
+    },
+    "audience": {
+      "type": "string",
+      "required": false,
+      "description": "Target audience",
+      "order": 2
+    },
+    "budget": {
+      "type": "string",
+      "required": false,
+      "description": "Budget range",
+      "order": 3
+    },
+    "timeline": {
+      "type": "string",
+      "required": false,
+      "description": "Campaign timeline",
+      "order": 4
+    },
+    "channels": {
+      "type": "string",
+      "required": false,
+      "description": "Comma-separated list of focus channels",
+      "order": 5
+    },
+    "notes": {
+      "type": "string",
+      "required": false,
+      "description": "Additional context",
+      "order": 6
+    }
+  }
+}

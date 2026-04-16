@@ -20,6 +20,8 @@ func main() {
 	if dataDir == "" {
 		dataDir = "./data"
 	}
+	// Resolve to absolute path so the server works regardless of working directory.
+	dataDir, _ = filepath.Abs(dataDir)
 	appsDir := filepath.Join(dataDir, "apps")
 	os.MkdirAll(appsDir, 0755)
 

@@ -145,6 +145,17 @@ func LoadOpenAPISpecFromBytes(data []byte) (*openapi3.T, error) {
 	return doc, nil
 }
 
+// LoadOpenAPISpecFromBytesLenient loads an OpenAPI spec without strict validation.
+// Useful for remote specs that may have minor validation issues but are otherwise usable.
+func LoadOpenAPISpecFromBytesLenient(data []byte) (*openapi3.T, error) {
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromData(data)
+	if err != nil {
+		return nil, generateAIOpenAPILoadError("Spec parsing", "", err)
+	}
+	return doc, nil
+}
+
 // ExtractOpenAPIOperations extracts all operations from the OpenAPI spec, merging path-level and operation-level parameters.
 // Returns a slice of OpenAPIOperation describing each operation.
 // Example usage for ExtractOpenAPIOperations:

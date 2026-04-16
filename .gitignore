@@ -31,9 +31,6 @@ go.work.sum
 # env file
 .env
 
-# Data directory
-data/
-
 # Editor/IDE
 # .idea/
 # .vscode/

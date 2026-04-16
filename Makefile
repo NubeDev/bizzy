@@ -1,10 +1,6 @@
-.PHONY: all build clean install test help
-.PHONY: server start stop reset test-api
-
 # Build output directory
 BIN_DIR := bin
 DATA_DIR := data
-APPS_DIR := apps
 
 # Ports
 SERVER_PORT := 8090
@@ -18,6 +14,10 @@ NUBE_CLI_BIN := $(BIN_DIR)/nube
 # Go build flags
 GO_BUILD := go build
 BUILD_FLAGS := -trimpath -ldflags="-s -w"
+
+.PHONY: all build clean install test help
+.PHONY: server start stop reset test-api
+.PHONY: $(NUBE_SERVER_BIN) $(NUBE_CLI_BIN)
 
 all: build
 
@@ -41,7 +41,7 @@ $(NUBE_CLI_BIN):
 
 ## server: Start nube-server (foreground)
 server: $(NUBE_SERVER_BIN)
-	NUBE_ADDR=:$(SERVER_PORT) NUBE_APPS_DIR=$(APPS_DIR) NUBE_DATA_DIR=$(DATA_DIR) $(NUBE_SERVER_BIN)
+	NUBE_ADDR=:$(SERVER_PORT) NUBE_DATA_DIR=$(DATA_DIR) $(NUBE_SERVER_BIN)
 
 ## start: Start nube-server (foreground)
 start: $(NUBE_SERVER_BIN)
@@ -53,7 +53,7 @@ start: $(NUBE_SERVER_BIN)
 	@echo ""
 	@echo "Press Ctrl+C to stop."
 	@echo ""
-	NUBE_ADDR=:$(SERVER_PORT) NUBE_APPS_DIR=$(APPS_DIR) NUBE_DATA_DIR=$(DATA_DIR) $(NUBE_SERVER_BIN)
+	NUBE_ADDR=:$(SERVER_PORT) NUBE_DATA_DIR=$(DATA_DIR) $(NUBE_SERVER_BIN)
 
 ## stop: Stop background servers
 stop:
