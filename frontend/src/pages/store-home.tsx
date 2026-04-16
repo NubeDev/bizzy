@@ -1,5 +1,7 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ArrowUp, Loader2 } from "lucide-react"
+import { motion, useMotionValue, useSpring, useTransform } from "motion/react"
+import { BouncingBalls } from "@/components/ui/bouncing-balls"
 import { useStoreApps, useCategories } from "@/hooks/use-store"
 import { AppCard } from "@/components/store/app-card"
 import { CategoryPills } from "@/components/store/category-pills"
@@ -17,6 +19,37 @@ export function StoreHomePage() {
   const [sort, setSort] = useState("popular")
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // Bouncing dots state: true during initial load (3s) or while typing
+  const [bouncing, setBouncing] = useState(true)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Stop bouncing after 3s on load
+  useEffect(() => {
+    const t = setTimeout(() => setBouncing(false), 3000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value)
+    setBouncing(true)
+    if (typingTimer.current) clearTimeout(typingTimer.current)
+    typingTimer.current = setTimeout(() => setBouncing(false), 800)
+  }
+
+  // Mouse parallax for glows
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+  const springX = useSpring(mouseX, { stiffness: 40, damping: 20 })
+  const springY = useSpring(mouseY, { stiffness: 40, damping: 20 })
+  const glowX = useTransform(springX, [-0.5, 0.5], ["-30px", "30px"])
+  const glowY = useTransform(springY, [-0.5, 0.5], ["-20px", "20px"])
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect()
+    mouseX.set((e.clientX - left) / width - 0.5)
+    mouseY.set((e.clientY - top) / height - 0.5)
+  }
+
   const { data, isLoading } = useStoreApps({ q: query, category, sort, limit: 30 })
   const { data: categories } = useCategories()
 
@@ -26,29 +59,57 @@ export function StoreHomePage() {
     }
   }
 
+  // Split "REN-AI" into letters for stagger
+  const letters = ["l", "-", "a", "i"]
+
   return (
     <div className="min-h-full">
       {/* ── Grok-style full-bleed hero ── */}
-      <section className="relative flex flex-col items-center justify-center min-h-[100vh] overflow-hidden bg-[#0e1015]">
-        {/* Atmospheric glow */}
+      <section
+        className="relative flex flex-col items-center justify-center min-h-[100vh] overflow-hidden bg-[#0e1015]"
+        onMouseMove={handleMouseMove}
+      >
+        {/* Atmospheric glow — parallax on mouse */}
         <div className="pointer-events-none absolute inset-0">
-          {/* Central radial glow */}
-          <div
+          <motion.div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px]"
-            style={{
-              background:
-                "radial-gradient(ellipse at center, rgba(120,140,200,0.12) 0%, rgba(80,100,160,0.06) 30%, rgba(40,60,120,0.02) 60%, transparent 80%)",
+            style={{ x: glowX, y: glowY,
+              background: "radial-gradient(ellipse at center, rgba(120,140,200,0.14) 0%, rgba(80,100,160,0.06) 30%, rgba(40,60,120,0.02) 60%, transparent 80%)",
               filter: "blur(40px)",
             }}
           />
-          {/* Right-side highlight (like the Grok screenshot) */}
-          <div
-            className="absolute top-1/4 right-0 w-[600px] h-[600px]"
+          {/* Floating orb 1 */}
+          <motion.div
+            className="absolute w-[300px] h-[300px] rounded-full"
             style={{
-              background:
-                "radial-gradient(ellipse at 80% 40%, rgba(180,200,255,0.08) 0%, rgba(120,160,220,0.03) 40%, transparent 70%)",
-              filter: "blur(60px)",
+              top: "20%", left: "15%",
+              background: "radial-gradient(circle, rgba(100,120,255,0.08) 0%, transparent 70%)",
+              filter: "blur(30px)",
             }}
+            animate={{ y: [0, -30, 0], x: [0, 15, 0], scale: [1, 1.1, 1] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          />
+          {/* Floating orb 2 */}
+          <motion.div
+            className="absolute w-[400px] h-[400px] rounded-full"
+            style={{
+              top: "30%", right: "10%",
+              background: "radial-gradient(circle, rgba(180,200,255,0.07) 0%, transparent 70%)",
+              filter: "blur(50px)",
+            }}
+            animate={{ y: [0, 25, 0], x: [0, -20, 0], scale: [1, 0.9, 1] }}
+            transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          />
+          {/* Floating orb 3 — bottom */}
+          <motion.div
+            className="absolute w-[250px] h-[250px] rounded-full"
+            style={{
+              bottom: "15%", left: "40%",
+              background: "radial-gradient(circle, rgba(140,100,255,0.06) 0%, transparent 70%)",
+              filter: "blur(35px)",
+            }}
+            animate={{ y: [0, -20, 0], scale: [1, 1.15, 1] }}
+            transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 4 }}
           />
           {/* Subtle grain overlay */}
           <div className="absolute inset-0 opacity-[0.03]" style={{
@@ -56,25 +117,57 @@ export function StoreHomePage() {
           }} />
         </div>
 
-        {/* Brand title — massive, centered, like "Grok" */}
-        <h1
-          className="relative z-10 font-mono font-extralight text-[clamp(5rem,15vw,12rem)] leading-[0.9] tracking-tight text-white select-none mb-10"
-          style={{
-            background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
+        {/* Brand title — letters + dots inline on same row */}
+        <motion.div
+          className="relative z-10 flex items-end mb-10 select-none"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
         >
-          nube
-        </h1>
+          {letters.map((letter, i) => (
+            <motion.span
+              key={i}
+              className="font-mono font-extralight leading-[0.9] tracking-tight"
+              style={{
+                fontSize: "clamp(5rem,15vw,12rem)",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.45) 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                display: "inline-block",
+              }}
+              variants={{
+                hidden: { opacity: 0, y: 60, filter: "blur(12px)" },
+                visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
+              }}
+              whileHover={{
+                scale: 1.08,
+                filter: "blur(0px)",
+                WebkitTextFillColor: "transparent",
+                transition: { duration: 0.2 },
+              }}
+            >
+              {letter}
+            </motion.span>
+          ))}
 
-        {/* Search box — centered, matches Grok's input style */}
-        <div className="relative z-10 w-full max-w-[640px] px-6">
+          {/* 5 coloured bouncing balls — inline, after last letter, bottom-aligned */}
+          <div className="ml-5 pb-[0.15em]">
+            <BouncingBalls active={bouncing} size={14} />
+          </div>
+        </motion.div>
+
+        {/* Search box */}
+        <motion.div
+          className="relative z-10 w-full max-w-[640px] px-6"
+          initial={{ opacity: 0, y: 30, filter: "blur(8px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ duration: 0.8, delay: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div className="relative rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm overflow-hidden focus-within:border-white/20 transition-colors">
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={handleQueryChange}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()
@@ -84,17 +177,24 @@ export function StoreHomePage() {
               placeholder="What do you want to find?"
               className="w-full bg-transparent px-6 py-5 pr-14 text-[15px] text-white placeholder:text-white/30 focus:outline-none font-light"
             />
-            <button
+            <motion.button
               onClick={handleSearch}
               className="absolute right-4 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/40 hover:text-white hover:border-white/30 transition-colors"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
             >
               <ArrowUp size={16} />
-            </button>
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
 
         {/* Bottom announcement strip */}
-        <div className="absolute bottom-0 inset-x-0 z-10 flex items-center justify-center gap-6 py-4 px-6 border-t border-white/[0.06]">
+        <motion.div
+          className="absolute bottom-0 inset-x-0 z-10 flex items-center justify-center gap-6 py-4 px-6 border-t border-white/[0.06]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 0.9 }}
+        >
           <span className="text-white/40 text-[13px] font-light">
             AI-powered tools for IoT & building automation
           </span>
@@ -104,7 +204,7 @@ export function StoreHomePage() {
           >
             Browse Apps
           </button>
-        </div>
+        </motion.div>
 
         {/* Scroll hint */}
         <div className="absolute bottom-16 left-8 z-10">

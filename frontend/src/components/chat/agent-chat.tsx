@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { ArrowUp, Loader2, Trash2 } from 'lucide-react'
+import { BouncingBalls } from '@/components/ui/bouncing-balls'
 import { useAgentChat } from '@/hooks/use-agent-chat'
 import { useCommandPicker, type PickerItem } from '@/hooks/use-command-picker'
 import { CommandPicker } from './command-picker'
@@ -175,6 +176,11 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
                 isStreaming={isStreaming}
               />
             ))}
+            {isStreaming && (
+              <div className="pl-1 py-2">
+                <BouncingBalls active={true} size={10} />
+              </div>
+            )}
           </div>
         )}
       </div>

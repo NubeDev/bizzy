@@ -52,3 +52,5 @@ apps/nube_agent/linux/flutter/ephemeral/
 apps/nube_agent/macos/Flutter/ephemeral/
 apps/nube_agent/windows/flutter/ephemeral/
 *.iml
+data/sessions.json
+data/sessions.json
