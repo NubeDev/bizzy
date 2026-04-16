@@ -15,11 +15,22 @@ func (a *API) listMyTools(c *gin.Context) {
 		return ai.UserID == user.ID && ai.Enabled
 	})
 
+	type paramInfo struct {
+		Name        string   `json:"name"`
+		Type        string   `json:"type"`
+		Required    bool     `json:"required"`
+		Description string   `json:"description"`
+		Options     []string `json:"options,omitempty"`
+	}
+
 	type toolInfo struct {
-		Name    string `json:"name"`
-		AppName string `json:"appName"`
-		Type    string `json:"type"` // openapi, js
-		Desc    string `json:"description"`
+		Name    string      `json:"name"`
+		AppName string      `json:"appName"`
+		Type    string      `json:"type"` // openapi, js
+		Mode    string      `json:"mode,omitempty"`
+		Prompt  string      `json:"prompt,omitempty"`
+		Desc    string      `json:"description"`
+		Params  []paramInfo `json:"params,omitempty"`
 	}
 
 	tools := make([]toolInfo, 0)
@@ -29,10 +40,7 @@ func (a *API) listMyTools(c *gin.Context) {
 		if !ok {
 			continue
 		}
-		// OpenAPI tools.
 		if app.HasOpenAPI {
-			// We can't easily list individual OpenAPI tool names without parsing the spec,
-			// but the MCPFactory has that info. For now, note the app has OpenAPI tools.
 			tools = append(tools, toolInfo{
 				Name:    inst.AppName + ".*",
 				AppName: inst.AppName,
@@ -40,14 +48,28 @@ func (a *API) listMyTools(c *gin.Context) {
 				Desc:    "OpenAPI-generated tools from " + inst.AppName,
 			})
 		}
-		// JS tools.
 		for _, m := range a.AppRegistry.GetTools(inst.AppName) {
-			tools = append(tools, toolInfo{
+			ti := toolInfo{
 				Name:    inst.AppName + "." + m.Name,
 				AppName: inst.AppName,
 				Type:    "js",
+				Mode:    m.Mode,
+				Prompt:  m.Prompt,
 				Desc:    m.Description,
-			})
+			}
+			for pName, pDef := range m.Params {
+				if pName == "_submit" || pName == "_answers" {
+					continue
+				}
+				ti.Params = append(ti.Params, paramInfo{
+					Name:        pName,
+					Type:        pDef.Type,
+					Required:    pDef.Required,
+					Description: pDef.Description,
+					Options:     pDef.Options,
+				})
+			}
+			tools = append(tools, ti)
 		}
 	}
 

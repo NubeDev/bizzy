@@ -22,10 +22,11 @@ var wsUpgrader = websocket.Upgrader{
 
 // wsRequest is the first message the client sends after connecting.
 type wsRequest struct {
-	Prompt   string `json:"prompt"`
-	Agent    string `json:"agent"`
-	Provider string `json:"provider,omitempty"` // "claude" (default), "codex", "copilot"
-	Model    string `json:"model,omitempty"`    // model override for the chosen provider
+	Prompt    string `json:"prompt"`
+	SessionID string `json:"session_id,omitempty"` // If set, resumes this Claude session (multi-turn)
+	Agent     string `json:"agent"`
+	Provider  string `json:"provider,omitempty"` // "claude" (default), "codex", "copilot"
+	Model     string `json:"model,omitempty"`    // model override for the chosen provider
 }
 
 // runAgentWS upgrades to WebSocket and runs a Claude session.
@@ -87,7 +88,13 @@ func (a *API) runAgentWS(c *gin.Context) {
 		sendWSError(conn, sessionID, "invalid request: "+err.Error())
 		return
 	}
-	log.Printf("[agents-ws] received prompt (%d chars), agent=%q, provider=%q", len(req.Prompt), req.Agent, req.Provider)
+	log.Printf("[agents-ws] received prompt (%d chars), agent=%q, provider=%q, resume=%q", len(req.Prompt), req.Agent, req.Provider, req.SessionID)
+	// Log the full prompt so we can see exactly what Claude receives.
+	if len(req.Prompt) <= 2000 {
+		log.Printf("[agents-ws] prompt text:\n---\n%s\n---", req.Prompt)
+	} else {
+		log.Printf("[agents-ws] prompt text (truncated):\n---\n%s\n...[%d more chars]\n---", req.Prompt[:2000], len(req.Prompt)-2000)
+	}
 
 	if req.Prompt == "" {
 		sendWSError(conn, sessionID, "prompt is required")
@@ -125,20 +132,41 @@ func (a *API) runAgentWS(c *gin.Context) {
 	eventCount := 0
 
 	if provider == airunner.ProviderClaude {
+		resumeID := req.SessionID // empty on first message, set on subsequent messages
+		if resumeID != "" {
+			log.Printf("[agents-ws] RESUMING claude session %s", resumeID)
+		} else {
+			log.Printf("[agents-ws] starting NEW claude session with MCP=%s", mcpURL)
+		}
 		result = claude.Run(claude.RunConfig{
 			Prompt:       req.Prompt,
+			ResumeID:     resumeID,
 			MCPURL:       mcpURL,
 			MCPToken:     user.Token,
 			AllowedTools: "mcp__nube__*",
 		}, sessionID, func(ev claude.Event) {
 			eventCount++
-			if ev.Type != "text" {
+			switch ev.Type {
+			case "text":
+				// skip logging streaming text chunks
+			case "tool_call":
+				log.Printf("[agents-ws] event #%d: tool_call name=%s", eventCount, ev.Name)
+			default:
 				log.Printf("[agents-ws] event #%d: type=%s", eventCount, ev.Type)
 			}
 			if err := conn.WriteJSON(ev); err != nil {
 				log.Printf("[agents-ws] ws write error: %v", err)
 			}
 		})
+		// Send the Claude session ID back so the frontend can resume next time.
+		if result.ClaudeSessionID != "" {
+			log.Printf("[agents-ws] claude session ID: %s", result.ClaudeSessionID)
+			conn.WriteJSON(claude.Event{
+				Type:      "session_id",
+				SessionID: sessionID,
+				Content:   result.ClaudeSessionID,
+			})
+		}
 		log.Printf("[agents-ws] claude finished: %d events, %dms, $%.4f", eventCount, result.DurationMS, result.CostUSD)
 	} else {
 		// Use the airunner abstraction for codex / copilot.
@@ -162,13 +190,14 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 	// Persist session to disk.
 	a.Sessions.Create(models.Session{
-		ID:         sessionID,
-		Agent:      req.Agent,
-		Prompt:     req.Prompt,
-		Result:     result.Text,
-		Status:     "done",
-		DurationMS: result.DurationMS,
-		CostUSD:    result.CostUSD,
+		ID:              sessionID,
+		ClaudeSessionID: result.ClaudeSessionID,
+		Agent:           req.Agent,
+		Prompt:          req.Prompt,
+		Result:          result.Text,
+		Status:          "done",
+		DurationMS:      result.DurationMS,
+		CostUSD:         result.CostUSD,
 		UserID:     user.ID,
 		CreatedAt:  time.Now().UTC(),
 	})
@@ -187,14 +216,15 @@ func sendWSError(conn *websocket.Conn, sessionID, msg string) {
 
 // sessionSummary is the list view (omits full result text).
 type sessionSummary struct {
-	ID         string    `json:"id"`
-	Agent      string    `json:"agent,omitempty"`
-	Prompt     string    `json:"prompt"`
-	Status     string    `json:"status"`
-	DurationMS int       `json:"duration_ms"`
-	CostUSD    float64   `json:"cost_usd"`
-	UserID     string    `json:"user_id"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
+	Agent           string    `json:"agent,omitempty"`
+	Prompt          string    `json:"prompt"`
+	Status          string    `json:"status"`
+	DurationMS      int       `json:"duration_ms"`
+	CostUSD         float64   `json:"cost_usd"`
+	UserID          string    `json:"user_id"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // listSessions returns session history for the authenticated user.
@@ -208,14 +238,15 @@ func (a *API) listSessions(c *gin.Context) {
 	out := make([]sessionSummary, 0, len(all))
 	for _, s := range all {
 		out = append(out, sessionSummary{
-			ID:         s.ID,
-			Agent:      s.Agent,
-			Prompt:     s.Prompt,
-			Status:     s.Status,
-			DurationMS: s.DurationMS,
-			CostUSD:    s.CostUSD,
-			UserID:     s.UserID,
-			CreatedAt:  s.CreatedAt,
+			ID:              s.ID,
+			ClaudeSessionID: s.ClaudeSessionID,
+			Agent:           s.Agent,
+			Prompt:          s.Prompt,
+			Status:          s.Status,
+			DurationMS:      s.DurationMS,
+			CostUSD:         s.CostUSD,
+			UserID:          s.UserID,
+			CreatedAt:       s.CreatedAt,
 		})
 	}
 

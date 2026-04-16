@@ -4,6 +4,7 @@ import { useTheme } from "@/hooks/use-theme"
 
 const navItems = [
   { label: "Store", url: "/" },
+  { label: "Chat", url: "/chat" },
   { label: "My Apps", url: "/my-apps" },
   { label: "Create", url: "/my-apps/create" },
 ]

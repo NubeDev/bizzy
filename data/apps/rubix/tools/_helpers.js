@@ -2,6 +2,27 @@
 // This file is auto-loaded before every tool in this app.
 
 function login() {
+  // Try stored token first (avoids duplicate key errors from rapid logins)
+  if (secrets.rubix_token) {
+    var me = http.get(config.rubix_host + "/api/v1/auth/me", {
+      headers: { "Authorization": "Bearer " + secrets.rubix_token }
+    });
+    if (me.status === 200 && me.json && me.json.data) {
+      var orgId = me.json.data.orgId;
+      var info = http.get(config.rubix_host + "/api/v1/orgs/" + orgId + "/info", {
+        headers: { "Authorization": "Bearer " + secrets.rubix_token }
+      });
+      if (info.status === 200 && info.json && info.json.data) {
+        return {
+          token: secrets.rubix_token,
+          orgId: orgId,
+          deviceId: info.json.data.deviceId
+        };
+      }
+    }
+  }
+
+  // Fallback: fresh login
   var resp = http.post(
     config.rubix_host + "/api/v1/auth/login",
     { email: "admin@rubix.io", password: "admin@rubix.io" },

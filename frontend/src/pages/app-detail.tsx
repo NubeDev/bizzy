@@ -4,6 +4,7 @@ import { ArrowLeft, Download, Wrench, MessageSquare, Check, Loader2, Play } from
 import { ToolRunner } from "@/components/store/tool-runner"
 import { PromptRunner } from "@/components/store/prompt-runner"
 import { QaWizard } from "@/components/store/qa-wizard"
+import { AgentChat } from "@/components/chat/agent-chat"
 import { useStoreApp, useAppReviews, useInstallApp, useSubmitReview } from "@/hooks/use-store"
 import { RatingStars, RatingInput } from "@/components/store/rating-stars"
 import { categoryLabel, formatDate } from "@/lib/utils"
@@ -143,6 +144,9 @@ export function AppDetailPage() {
           <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Overview</TabsTrigger>
           <TabsTrigger value="tools" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Tools & Prompts ({(app.tools?.length || 0) + (app.prompts?.length || 0)})</TabsTrigger>
           <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Reviews ({app.reviewCount})</TabsTrigger>
+          {installed && (
+            <TabsTrigger value="chat" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Chat</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-6">
@@ -174,6 +178,21 @@ export function AppDetailPage() {
             <p className="text-sm text-muted-foreground">No tools or prompts defined yet.</p>
           )}
         </TabsContent>
+
+        {installed && (
+          <TabsContent value="chat" className="mt-2">
+            <div className="h-[calc(100vh-320px)] min-h-[400px]">
+              <AgentChat
+                systemPrompt={`You are an AI assistant for the "${app.displayName}" app (${app.name}). ${app.description}\n\nThe app has these tools: ${app.tools?.map(t => `${app.name}.${t.name} — ${t.description}`).join('; ') || 'none'}.\nAnd these prompts: ${app.prompts?.map(p => `${app.name}.${p.name} — ${p.description}`).join('; ') || 'none'}.\n\nUse the app's tools to help the user. Prefer the JS tools (${app.name}.*) over generic OpenAPI tools when available.`}
+                placeholder={`Ask about ${app.displayName}...`}
+                suggestions={[
+                  ...(app.prompts?.slice(0, 3).map(p => ({ label: p.description || p.name, prompt: `/${app.name}.${p.name}` })) || []),
+                  { label: `What can ${app.displayName} do?`, prompt: `What tools and capabilities does ${app.displayName} have?` },
+                ]}
+              />
+            </div>
+          </TabsContent>
+        )}
 
         <TabsContent value="reviews" className="space-y-4 mt-6">
           {installed && (

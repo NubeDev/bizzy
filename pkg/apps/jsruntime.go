@@ -61,6 +61,9 @@ func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[strin
 		}
 	}
 
+	toolName := filepath.Base(scriptPath)
+	log.Printf("[jsruntime] executing %s", toolName)
+
 	// Run the script to define the handle() function.
 	if _, err := vm.RunString(string(script)); err != nil {
 		return nil, fmt.Errorf("script error: %w", err)
@@ -100,8 +103,14 @@ func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[strin
 	exported := res.val.Export()
 	switch v := exported.(type) {
 	case map[string]any:
+		if errMsg, ok := v["error"]; ok {
+			log.Printf("[jsruntime] %s returned error: %v", toolName, errMsg)
+		} else {
+			log.Printf("[jsruntime] %s completed OK", toolName)
+		}
 		return v, nil
 	default:
+		log.Printf("[jsruntime] %s completed OK", toolName)
 		return map[string]any{"result": exported}, nil
 	}
 }

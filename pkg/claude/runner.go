@@ -15,6 +15,7 @@ import (
 // RunConfig configures a Claude Code invocation.
 type RunConfig struct {
 	Prompt       string
+	ResumeID     string // If set, resumes an existing Claude session instead of starting fresh
 	MCPURL       string // e.g. http://localhost:8090/mcp
 	MCPToken     string // Bearer token for MCP auth
 	AllowedTools string // Tool pattern, e.g. "mcp__nube__*"
@@ -34,9 +35,10 @@ type Event struct {
 
 // RunResult contains the aggregated output after a run completes.
 type RunResult struct {
-	Text       string
-	DurationMS int
-	CostUSD    float64
+	Text            string
+	ClaudeSessionID string // The Claude CLI session ID (for --resume)
+	DurationMS      int
+	CostUSD         float64
 }
 
 // Run spawns claude and sends parsed events to the callback.
@@ -64,6 +66,11 @@ func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 		"--verbose",
 		"--allowedTools", cfg.AllowedTools, "ToolSearch",
 		"--mcp-config", mcpFile,
+	}
+
+	// Resume an existing session for multi-turn conversations.
+	if cfg.ResumeID != "" {
+		args = append(args, "--resume", cfg.ResumeID)
 	}
 
 	cmd := exec.Command(claudePath, args...)
@@ -95,8 +102,16 @@ func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 			continue
 		}
 
+		// Capture the Claude session ID from the init event for resume support.
+		if t, _ := raw["type"].(string); t == "system" {
+			if sub, _ := raw["subtype"].(string); sub == "init" {
+				if sid, _ := raw["session_id"].(string); sid != "" {
+					result.ClaudeSessionID = sid
+				}
+			}
+		}
+
 		for _, ev := range parseRawEvent(raw, sessionID) {
-			// Accumulate result data.
 			result.Text += ev.Content
 			if ev.Type == "done" {
 				result.DurationMS = ev.DurationMS

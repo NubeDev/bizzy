@@ -294,6 +294,12 @@ func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.A
 		manifest := m // capture
 		namespacedName := app.Name + "." + manifest.Name
 
+		// Prompt-mode tools are MCP prompts only — no callable tool.
+		if manifest.Mode == "prompt" && manifest.Prompt != "" {
+			f.registerPromptTool(srv, app, manifest)
+			continue
+		}
+
 		// Build JSON Schema for the tool's params.
 		schema := buildToolSchema(manifest)
 
@@ -438,6 +444,51 @@ func (f *MCPFactory) registerQAPrompt(srv *mcp.Server, app *App, manifest ToolMa
 	})
 
 	log.Printf("[mcpfactory] %s: auto-registered QA prompt for tool %s", app.Name, manifest.Name)
+}
+
+// registerPromptTool registers a prompt-mode tool as an MCP prompt so it
+// appears as a /nube:app.name slash command in Claude Code / VS Code.
+func (f *MCPFactory) registerPromptTool(srv *mcp.Server, app *App, manifest ToolManifest) {
+	namespacedName := app.Name + "." + manifest.Name
+
+	var args []*mcp.PromptArgument
+	for name, def := range manifest.Params {
+		if strings.HasPrefix(name, "_") {
+			continue
+		}
+		args = append(args, &mcp.PromptArgument{
+			Name:        name,
+			Description: def.Description,
+			Required:    def.Required,
+		})
+	}
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        namespacedName,
+		Description: manifest.Description,
+		Arguments:   args,
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		body := manifest.Prompt
+		for k, v := range req.Params.Arguments {
+			body = strings.ReplaceAll(body, "{{"+k+"}}", v)
+		}
+		if app.Preamble != "" {
+			body = app.Preamble + "\n\n---\n\n" + body
+		}
+		return &mcp.GetPromptResult{
+			Description: manifest.Description,
+			Messages: []*mcp.PromptMessage{
+				{
+					Role: "user",
+					Content: &mcp.TextContent{
+						Text: body,
+					},
+				},
+			},
+		}, nil
+	})
+
+	log.Printf("[mcpfactory] %s: registered prompt-mode tool %s as MCP prompt", app.Name, manifest.Name)
 }
 
 func (f *MCPFactory) registerPrompts(srv *mcp.Server, app *App) {

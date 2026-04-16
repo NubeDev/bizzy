@@ -5,12 +5,14 @@ import { AppDetailPage } from './pages/app-detail'
 import { MyAppsPage } from './pages/my-apps'
 import { AppEditorPage } from './pages/app-editor'
 import { CreateAppPage } from './pages/create-app'
+import { ChatPage } from './pages/chat'
 
 function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<StoreHomePage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/apps/:id" element={<AppDetailPage />} />
         <Route path="/my-apps" element={<MyAppsPage />} />
         <Route path="/my-apps/create" element={<CreateAppPage />} />

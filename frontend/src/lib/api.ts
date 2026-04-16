@@ -155,6 +155,35 @@ class ApiClient {
     })
   }
 
+  // User's installed tools and prompts (prompt-mode tools are included in the same list)
+  myTools() {
+    return this.request<{
+      name: string
+      appName: string
+      type: string
+      mode?: string
+      prompt?: string
+      description: string
+      params?: { name: string; type: string; required: boolean; description: string; options?: string[] }[]
+    }[]>('/my/tools')
+  }
+  getPrompt(name: string) {
+    return this.request<{ name: string; description: string; rendered: string }>(`/my/prompts/${name}`)
+  }
+
+  // Chat sessions
+  listSessions() {
+    return this.request<{
+      id: string
+      claude_session_id?: string
+      prompt: string
+      status: string
+      duration_ms: number
+      cost_usd: number
+      created_at: string
+    }[]>('/api/agents/sessions')
+  }
+
   // Run a prompt via the agent API
   runPrompt(prompt: string, provider?: string, model?: string) {
     return this.request<{ session_id: string; provider: string; text: string; duration_ms: number; cost_usd: number }>('/api/agents/run/sync', {

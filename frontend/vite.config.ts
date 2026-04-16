@@ -19,6 +19,10 @@ export default defineConfig({
       },
       '/health': 'http://localhost:8090',
       '/users': 'http://localhost:8090',
+      '/my': 'http://localhost:8090',
+      '/apps': 'http://localhost:8090',
+      '/app-installs': 'http://localhost:8090',
+      '/admin': 'http://localhost:8090',
     },
   },
 })
