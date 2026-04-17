@@ -4,7 +4,7 @@ A collection of concrete improvements to bizzy, prioritised by impact.
 
 ---
 
-## 1. Preamble Composition (high priority, low effort)
+## 1. Preamble Composition — DONE
 
 **Problem:** When a user runs `nube ask` without `--agent`, the AI has tools available via MCP but no context about what they do or how to combine them. The AI sees `nube-hardware.get_product` but doesn't know when to use it.
 
@@ -186,7 +186,7 @@ The `/` prefix is already parsed in the ask flow — this extends it to support 
 
 ---
 
-## 6. Observability: Tool Call Tracking
+## 6. Observability: Tool Call Tracking — DONE
 
 **Problem:** Sessions track `ToolCalls` as a count but not which tools were called, how long each took, or which ones failed. Can't answer "which tools are slow?" or "which tools fail most?"
 
@@ -283,7 +283,7 @@ User prompt
 
 ---
 
-## 9. Replace JSON DB with GORM + SQLite/PostgreSQL (high priority, medium effort)
+## 9. Replace JSON DB with GORM + SQLite/PostgreSQL — DONE
 
 **Problem:** All data lives in JSON files (`pkg/jsondb.Collection[T]`). Every query is a linear scan — `FindFunc()` loads the entire collection into memory and iterates. There are no indexes, no DB-level filtering, no proper pagination, and no referential integrity.
 
@@ -475,21 +475,19 @@ platform.tool_stats        — "Show tool usage, latency, and error rates"
 
 ## Priority ranking
 
-| # | Idea | Effort | Impact | Priority |
+| # | Idea | Effort | Impact | Status |
 |---|---|---|---|---|
-| 6 | Tool call tracking | Low | High | Do first — foundation for all optimization decisions |
-| 1 | Preamble composition | Low | High | Do second — quick win, solves "AI doesn't know its tools" |
-| 9 | GORM + SQLite/PG migration | Medium | High | Do third — every query gets faster, enables FTS and vector search later |
-| 10 | Platform tools | Low | High | Do alongside #9 — once you have a real DB, give the AI access to it |
-| 8 | Server-side agent loop | High | High | Do fourth — unlocks tools for all non-Claude providers |
-| 5 | Prompt chaining | Medium | High | Do fifth — high value but get execution model right |
+| 6 | Tool call tracking | Low | High | **DONE** — `ToolCallLog` on sessions, per-tool name/duration/status/error |
+| 1 | Preamble composition | Low | High | **DONE** — `BuildAppContext()` on MCPFactory, injected via `AgentService` |
+| 9 | GORM + SQLite/PG migration | Medium | High | **DONE** — SQLite via GORM, auto-migrate, JSON import on first startup. See [DB.md](DB.md) |
+| 10 | Platform tools | Low | High | Next — DB is ready, register Go-native `platform.*` tools in MCPFactory |
+| 8 | Server-side agent loop | High | High | Next — unlocks tools for all non-Claude providers |
+| 5 | Prompt chaining | Medium | High | Planned — high value but get execution model right |
 | 2 | Tool result caching | Medium | Medium | Phase 2 — informed by tracking data from #6 |
 | 3 | Settings/secrets hardening | Low | Medium | Phase 2 — model split exists, just finish the API/encryption |
 | 4 | Event hooks | High | Medium | Phase 3 — only after core loop is solid |
 | 7 | App templates | Low | Low | Nice to have — do it when someone asks |
 
-**Rationale:**
+**What's next:**
 
-The first two items (tracking + preamble) are low-effort, high-impact quick wins. The DB migration (#9) comes next because it's a force multiplier — proper indexes make tools respond faster (which helps the AI), FTS makes app discovery work properly, and it unblocks vector search for semantic features later. Platform tools (#10) pair naturally with #9 — once you have GORM, registering Go-native tools with direct DB queries is trivial. The agent loop (#8) follows because it's the largest capability gap (non-Claude providers can't use tools), but it benefits from the DB migration being done first.
-
-Settings/secrets (#3) effort is lower than originally estimated because the model split already exists — what's left is API masking and encryption. Event hooks (#4) should wait until the core loop is solid and observability (#6) shows which errors actually need handling.
+With tracking (#6), preamble (#1), and the DB (#9) done, the two highest-impact remaining items are platform tools (#10) and the server-side agent loop (#8). Platform tools are low effort since GORM is in place — just register `platform.list_sessions`, `platform.usage_stats`, etc. as Go-native tools in MCPFactory. The agent loop is higher effort but unlocks tool calling for Ollama, OpenAI, Anthropic, and Gemini.

@@ -46,12 +46,12 @@ The core idea: **apps teach the AI what it can do**. An admin installs apps (a R
         │
         v
 ┌──────────────────────────────────────────────────────────────┐
-│                    Data (all file-based)                      │
+│                         Data                                 │
 │                                                              │
+│   data/bizzy.db        SQLite database (users, sessions,     │
+│                        installs, store apps, workflows)      │
 │   data/apps/           App directories (YAML, JS, prompts)   │
-│   data/*.json          Users, sessions, installs, store      │
 │   data/memory/         Server + per-user memory (markdown)   │
-│   data/workflow_runs/  Workflow execution history            │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -151,21 +151,19 @@ All three go through the same `Runner.Run()` backend via `AgentService`. Prompts
 
 ## Data storage
 
-Everything is file-based. No database required.
+SQLite database (`data/bizzy.db`) for all structured data. App files and memory remain on disk.
 
 | What | Format | Location |
 |---|---|---|
-| Users, workspaces | JSON | `data/users.json`, `data/workspaces.json` |
-| App installs | JSON | `data/app_installs.json` |
-| Sessions | JSON | `data/sessions.json` |
-| Store apps | JSON | `data/store_apps.json` |
-| Provider config | JSON | `data/provider_config.json` |
+| Users, workspaces | SQLite | `data/bizzy.db` |
+| Sessions, app installs | SQLite | `data/bizzy.db` |
+| Store apps, reviews, shares | SQLite | `data/bizzy.db` |
+| Provider config | SQLite | `data/bizzy.db` |
+| Workflow runs | SQLite | `data/bizzy.db` |
 | App files | YAML, JS, MD | `data/apps/<name>/` |
 | Memory | Markdown | `data/memory/server.md`, `data/memory/users/<id>.md` |
 
-JSON collections use `pkg/jsondb` — file-backed with in-memory caching, thread-safe reads/writes, atomic file operations.
-
-See: [BACKEND.md](BACKEND.md) (data model details)
+See: [DB.md](DB.md) (schema, indexes, migration)
 
 ---
 
@@ -216,14 +214,14 @@ bizzy/
     auth/                Bearer token middleware
     claude/              Claude CLI spawner, stream-json parser
     cli/                 CLI commands (ask, memory, tools, workflows, etc.)
-    jsondb/              File-backed JSON collections
+    database/            SQLite database init, migration
     memory/              Server + per-user memory store
     models/              Core data types (User, Session, StoreApp, etc.)
     workflow/            Workflow engine (definition parsing, stage execution)
   data/
     apps/                App directories (system + user-created)
     memory/              Memory files
-    *.json               Runtime data (users, sessions, installs, etc.)
+    bizzy.db             SQLite database
   app/
     nube_agent/          Flutter app
   mcp/                   OpenAPI-to-MCP conversion library
@@ -237,7 +235,8 @@ bizzy/
 
 | Doc | What it covers |
 |---|---|
-| [BACKEND.md](BACKEND.md) | Server setup, data storage, API reference, auth, app loading |
+| [BACKEND.md](BACKEND.md) | Server setup, API reference, auth, app loading |
+| [DB.md](DB.md) | SQLite database, schema, indexes, JSON migration |
 | [CLI.md](CLI.md) | CLI commands, configuration, authentication |
 | [FRONTEND.md](FRONTEND.md) | Web frontend |
 | [APP.md](APP.md) | Flutter app architecture and setup |
