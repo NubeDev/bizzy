@@ -152,6 +152,52 @@ components:
         createdAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
 
+    WorkflowRun:
+      type: object
+      properties:
+        id:          { type: string, description: "Client-generated UUID (idempotency key)" }
+        app:         { type: string }
+        workflow:    { type: string }
+        inputs:      { type: object, additionalProperties: true }
+        status:      { type: string, enum: [running, waiting_approval, completed, failed, cancelled] }
+        version:     { type: integer, description: "Increments on every stage transition" }
+        stages:      { type: array, items: { $ref: '#/components/schemas/StageResult' } }
+        current_idx: { type: integer }
+        failed_at:   { type: string }
+        error:       { type: string }
+        user_id:     { type: string }
+        created_at:  { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+
+    StageResult:
+      type: object
+      properties:
+        name:        { type: string }
+        status:      { type: string, enum: [pending, running, completed, failed, skipped, waiting] }
+        output:      { description: "Stage output (type varies)" }
+        error:       { type: string }
+        duration_ms: { type: integer }
+        started_at:  { type: string, format: date-time }
+
+    WorkflowDef:
+      type: object
+      properties:
+        app:         { type: string }
+        name:        { type: string }
+        description: { type: string }
+        depends:     { type: array, items: { type: string } }
+        inputs:
+          type: array
+          items:
+            type: object
+            properties:
+              name:        { type: string }
+              description: { type: string }
+              required:    { type: boolean }
+              options:     { type: array, items: { type: string } }
+              default:     { type: string }
+        stage_count: { type: integer }
+
 # =============================================================================
 # Paths — every route from router.go with x-cli for auto-generated CLI commands
 # =============================================================================

@@ -56,6 +56,14 @@ func (a *API) runAgentREST(c *gin.Context) {
 		return
 	}
 
+	// Prepend memory (server + user) to the prompt.
+	prompt := req.Prompt
+	if a.Memory != nil {
+		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
+			prompt = prefix + prompt
+		}
+	}
+
 	if req.Agent != "" {
 		if _, exists := a.AppRegistry.Get(req.Agent); !exists {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "agent not found: " + req.Agent})
@@ -69,7 +77,7 @@ func (a *API) runAgentREST(c *gin.Context) {
 	// Collect events (the caller gets the final result, not a stream).
 	var events []airunner.Event
 	result := runner.Run(c.Request.Context(), airunner.RunConfig{
-		Prompt:       req.Prompt,
+		Prompt:       prompt,
 		MCPURL:       mcpURL,
 		MCPToken:     user.Token,
 		AllowedTools: "mcp__nube__*",

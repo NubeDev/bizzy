@@ -108,6 +108,14 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
 
+	// Prepend memory (server + user) to the prompt.
+	prompt := req.Prompt
+	if a.Memory != nil {
+		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
+			prompt = prefix + prompt
+		}
+	}
+
 	provider, model := resolveProvider(req.Provider, req.Model, user)
 	log.Printf("[agents-ws] using provider: %s", provider)
 
@@ -138,7 +146,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 		model,
 		runner,
 		airunner.RunConfig{
-			Prompt:       req.Prompt,
+			Prompt:       prompt,
 			ResumeID:     req.SessionID,
 			MCPURL:       mcpURL,
 			MCPToken:     user.Token,

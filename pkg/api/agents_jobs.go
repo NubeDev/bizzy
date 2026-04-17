@@ -59,6 +59,14 @@ func (a *API) submitJob(c *gin.Context) {
 		}
 	}
 
+	// Prepend memory (server + user) to the prompt.
+	prompt := req.Prompt
+	if a.Memory != nil {
+		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
+			prompt = prefix + prompt
+		}
+	}
+
 	jobID := models.GenerateID("job-")
 	sessionID := models.GenerateID("ses-")
 	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
@@ -69,7 +77,7 @@ func (a *API) submitJob(c *gin.Context) {
 		model,
 		runner,
 		airunner.RunConfig{
-			Prompt:       req.Prompt,
+			Prompt:       prompt,
 			MCPURL:       mcpURL,
 			MCPToken:     user.Token,
 			AllowedTools: "mcp__nube__*",

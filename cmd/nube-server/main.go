@@ -12,7 +12,9 @@ import (
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/jsondb"
+	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/workflow"
 )
 
 func main() {
@@ -87,6 +89,26 @@ func main() {
 		log.Fatalf("failed to load provider_config: %v", err)
 	}
 
+	// Load workflow runs.
+	workflowRuns, err := jsondb.NewCollection[models.WorkflowRun](filepath.Join(dataDir, "workflow_runs.json"))
+	if err != nil {
+		log.Fatalf("failed to load workflow_runs: %v", err)
+	}
+
+	// Load workflow definitions from app directories.
+	wfStore := workflow.NewStore()
+	for _, app := range registry.List() {
+		if err := wfStore.LoadFromAppDir(app.Name, app.Dir); err != nil {
+			log.Printf("[workflows] failed to load workflows for %s: %v", app.Name, err)
+		}
+	}
+	wfCount := 0
+	for _, wfs := range wfStore.ListAll() {
+		wfCount += len(wfs)
+	}
+
+	memStore := memory.NewStore(dataDir)
+
 	runners := airunner.NewRegistry()
 
 	a := &api.API{
@@ -99,10 +121,20 @@ func main() {
 		Runners:        runners,
 		Jobs:           airunner.NewJobStore(),
 		ProviderConfig: providerConfig,
+		Memory:         memStore,
 		StoreApps:      storeApps,
 		AppShares:      appShares,
 		AppReviews:     appReviews,
+		WorkflowStore:  wfStore,
 	}
+
+	// Wire up the workflow engine (needs the API for tool/prompt bridges).
+	a.Workflows = workflow.NewRunner(
+		workflowRuns,
+		wfStore,
+		api.NewWorkflowToolCaller(a),
+		api.NewWorkflowPromptRunner(a),
+	)
 
 	// Apply saved provider config to runners (host overrides, etc.).
 	a.ApplyProviderConfig(providerConfig.Get())
@@ -111,6 +143,7 @@ func main() {
 
 	fmt.Fprintf(os.Stderr, "[nube-server] listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "[nube-server] apps: %d loaded from %s\n", len(registry.List()), appsDir)
+	fmt.Fprintf(os.Stderr, "[nube-server] workflows: %d loaded\n", wfCount)
 	if users.Count() == 0 {
 		fmt.Fprintf(os.Stderr, "[nube-server] no users found — POST /bootstrap to create the first admin\n")
 	}

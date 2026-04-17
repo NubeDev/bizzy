@@ -6,7 +6,9 @@ import (
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/jsondb"
+	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,10 +24,16 @@ type API struct {
 	Jobs           *airunner.JobStore                          // In-memory async job store
 	ProviderConfig *jsondb.ConfigFile[models.ProviderConfig]   // Global provider settings (admin)
 
+	Memory         *memory.Store                                  // Server + per-user memory
+
 	// Store collections.
 	StoreApps  *jsondb.Collection[models.StoreApp]
 	AppShares  *jsondb.Collection[models.AppShare]
 	AppReviews *jsondb.Collection[models.AppReview]
+
+	// Workflow engine.
+	Workflows     *workflow.Runner
+	WorkflowStore *workflow.Store
 }
 
 // SetupRouter creates a gin router with all routes mounted.
@@ -106,6 +114,13 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.GET("/my/prompts", a.listMyPrompts)
 	authed.GET("/my/prompts/:name", a.getPrompt)
 
+	// Memory API.
+	authed.GET("/api/memory/me", a.getMyMemory)
+	authed.PUT("/api/memory/me", a.setMyMemory)
+	authed.POST("/api/memory/me", a.appendMyMemory)
+	admin.GET("/api/memory/server", a.getServerMemory)
+	admin.PUT("/api/memory/server", a.setServerMemory)
+
 	// Agent API.
 	authed.GET("/api/agents", a.listAgents)
 	authed.POST("/api/agents/tools/:name", a.callTool)
@@ -142,6 +157,15 @@ func (a *API) SetupRouter() *gin.Engine {
 	}
 	r.Any("/mcp", mcpGin)
 	r.Any("/mcp/*path", mcpGin)
+
+	// --- Workflows ---
+	wf := authed.Group("/api/workflows")
+	wf.POST("/run", a.runWorkflow)
+	wf.GET("/definitions", a.listWorkflowDefs)
+	wf.GET("", a.listWorkflowRuns)
+	wf.GET("/:id", a.getWorkflowRun)
+	wf.POST("/:id/approve", a.approveWorkflow)
+	wf.POST("/:id/cancel", a.cancelWorkflow)
 
 	// --- App Store ---
 
