@@ -8,6 +8,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
 )
@@ -34,6 +35,10 @@ type API struct {
 	// Workflow engine.
 	Workflows     *workflow.Runner
 	WorkflowStore *workflow.Store
+
+	// Reusable application services (decoupled from HTTP).
+	AgentSvc *services.AgentService
+	ToolSvc  *services.ToolService
 }
 
 // SetupRouter creates a gin router with all routes mounted.

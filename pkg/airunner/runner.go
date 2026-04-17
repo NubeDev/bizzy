@@ -21,6 +21,7 @@ const (
 // RunConfig is the provider-agnostic configuration for a run.
 type RunConfig struct {
 	Prompt       string `json:"prompt"`
+	SystemPrompt string `json:"system_prompt,omitempty"`  // System-level context (memory, app descriptions)
 	ResumeID     string `json:"resume_id,omitempty"`      // Resume a previous session (Claude: --resume)
 	MCPURL       string `json:"mcp_url,omitempty"`        // MCP server endpoint
 	MCPToken     string `json:"mcp_token,omitempty"`      // Bearer token for MCP auth

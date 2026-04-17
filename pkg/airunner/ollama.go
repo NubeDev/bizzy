@@ -122,13 +122,17 @@ func (r *OllamaRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 	}
 	result.Model = model
 
-	// Build request body.
+	// Build messages — separate system context from user prompt for better quality.
+	var messages []ollamaMessage
+	if cfg.SystemPrompt != "" {
+		messages = append(messages, ollamaMessage{Role: "system", Content: cfg.SystemPrompt})
+	}
+	messages = append(messages, ollamaMessage{Role: "user", Content: cfg.Prompt})
+
 	body, _ := json.Marshal(ollamaChatRequest{
-		Model: model,
-		Messages: []ollamaMessage{
-			{Role: "user", Content: cfg.Prompt},
-		},
-		Stream: true,
+		Model:    model,
+		Messages: messages,
+		Stream:   true,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.getHost()+"/api/chat", bytes.NewReader(body))

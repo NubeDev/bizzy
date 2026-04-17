@@ -31,9 +31,13 @@ The core idea: **apps teach the AI what it can do**. An admin installs apps (a R
 │     │     │ workflows/ │    │         │     │         │      │
 │     │     └───────────┘    └─────────┘     └─────────┘      │
 │     │                                                        │
+│   Service Layer (pkg/services/ — no HTTP dependency)         │
+│     ├── AgentService  (prompt enrichment, sessions, providers)│
+│     └── ToolService   (tool resolution, execution, listing)  │
+│                                                              │
 │   AI Runner Registry                                         │
 │     ├── Claude  (CLI, MCP tools, session resume)             │
-│     ├── Ollama  (API, local models)                          │
+│     ├── Ollama  (API, local models, system prompt)           │
 │     ├── Codex   (CLI)                                        │
 │     └── Copilot (CLI)                                        │
 │                                                              │
@@ -80,14 +84,16 @@ See: [BACKEND.md](BACKEND.md) (app loading, registry), [MCP.md](MCP.md) (tool se
 
 Multiple AI backends through one interface. All providers implement `Runner.Run()` and emit the same normalised events (`connected`, `text`, `tool_call`, `done`, `error`).
 
-| Provider | Type | Tool calling | Session resume |
-|---|---|---|---|
-| Claude | CLI | Yes (native MCP) | Yes |
-| Ollama | API (local) | No | No |
-| Codex | CLI | No | No |
-| Copilot | CLI | No | No |
+| Provider | Type | Tool calling | System prompt | Session resume |
+|---|---|---|---|---|
+| Claude | CLI | Yes (native MCP) | Via prompt prefix | Yes |
+| Ollama | API (local) | No | Yes (system message) | No |
+| Codex | CLI | No | Via prompt prefix | No |
+| Copilot | CLI | No | Via prompt prefix | No |
 
 Users can set a default provider or override per-request. Admins configure provider availability and API keys.
+
+API-based providers (Ollama, future OpenAI/Anthropic/Gemini) receive memory and app context as a `system` message, separate from the user's prompt. This improves response quality because models treat system instructions differently from user input.
 
 See: [MULTI-PROVIDER.md](MULTI-PROVIDER.md)
 
@@ -98,7 +104,7 @@ Persistent context that carries across conversations. Two scopes:
 - **Server memory** — shared by all users, set by admin ("This is the Sydney Office deployment, we use Celsius")
 - **User memory** — private to each user ("I prefer detailed responses, my team manages floors 5-8")
 
-Memory is plain markdown, prepended to every AI prompt server-side. The user doesn't manage it per-conversation — it's always there.
+Memory is plain markdown, injected into every AI prompt server-side. For API-based providers (Ollama), it goes in the `system` message. For CLI providers (Claude), it's prepended to the user prompt. The user doesn't manage it per-conversation — it's always there.
 
 See: [MEMORY.md](MEMORY.md)
 
@@ -139,7 +145,7 @@ See: [STORE.md](STORE.md)
 | **REST sync** | `POST /api/agents/run/sync` | Simple request/response (scripts, testing) |
 | **Async jobs** | `POST /api/agents/jobs` | Fire-and-forget with polling (cron, CI, webhooks) |
 
-All three go through the same `Runner.Run()` backend. Memory is injected, sessions are persisted, and events are normalised regardless of which entry point is used.
+All three go through the same `Runner.Run()` backend via `AgentService`. Prompts are enriched (memory + app context), system prompts are passed separately for API providers, sessions are persisted with detailed tool call logs, and events are normalised regardless of which entry point is used.
 
 ---
 
@@ -203,7 +209,8 @@ bizzy/
     nube-server/         Server entry point
     nube/                CLI entry point (embeds OpenAPI spec)
   pkg/
-    api/                 REST/WS handlers, router, MCP endpoint
+    api/                 Thin HTTP handlers, router, MCP endpoint
+    services/            Reusable application logic (AgentService, ToolService)
     airunner/            Provider interface, runners, job store
     apps/                App registry, MCP factory, tool/prompt loading
     auth/                Bearer token middleware

@@ -14,6 +14,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 )
 
@@ -111,6 +112,23 @@ func main() {
 
 	runners := airunner.NewRegistry()
 
+	// Create reusable application services.
+	agentSvc := &services.AgentService{
+		Memory:      memStore,
+		MCPFactory:  mcpFactory,
+		AppInstalls: appInstalls,
+		Sessions:    sessions,
+		Users:       users,
+		Runners:     runners,
+		Jobs:        airunner.NewJobStore(),
+		AppRegistry: registry,
+	}
+
+	toolSvc := &services.ToolService{
+		AppInstalls: appInstalls,
+		AppRegistry: registry,
+	}
+
 	a := &api.API{
 		Workspaces:     workspaces,
 		Users:          users,
@@ -119,21 +137,23 @@ func main() {
 		AppRegistry:    registry,
 		MCPFactory:     mcpFactory,
 		Runners:        runners,
-		Jobs:           airunner.NewJobStore(),
+		Jobs:           agentSvc.Jobs,
 		ProviderConfig: providerConfig,
 		Memory:         memStore,
 		StoreApps:      storeApps,
 		AppShares:      appShares,
 		AppReviews:     appReviews,
 		WorkflowStore:  wfStore,
+		AgentSvc:       agentSvc,
+		ToolSvc:        toolSvc,
 	}
 
-	// Wire up the workflow engine (needs the API for tool/prompt bridges).
+	// Wire up the workflow engine (uses services, not the API directly).
 	a.Workflows = workflow.NewRunner(
 		workflowRuns,
 		wfStore,
-		api.NewWorkflowToolCaller(a),
-		api.NewWorkflowPromptRunner(a),
+		api.NewWorkflowToolCaller(toolSvc),
+		api.NewWorkflowPromptRunner(agentSvc),
 	)
 
 	// Apply saved provider config to runners (host overrides, etc.).

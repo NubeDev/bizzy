@@ -171,6 +171,46 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 
 ---
 
+## Service layer
+
+Reusable application logic lives in `pkg/services/`, decoupled from HTTP handlers. The services can be consumed by REST handlers, CLI commands, workflow engines, or any other Go code without importing `pkg/api` or depending on gin.
+
+### AgentService (`pkg/services/agent.go`)
+
+| Method | Description |
+|---|---|
+| `EnrichPrompt(userID, prompt)` | Prepends memory + app context to a prompt (for CLI providers that don't support system messages) |
+| `BuildSystemPrompt(userID)` | Returns memory + app context as a separate string for providers that support system messages (Ollama, OpenAI, Anthropic) |
+| `ResolveProvider(reqProvider, reqModel, user)` | Returns provider and model with user defaults applied |
+| `GetRunner(provider)` | Returns a runner, checking availability |
+| `SaveSession(params)` | Persists a completed session with tool call log |
+| `ListSessions(userID)` | Returns sessions for a user |
+| `GetSession(id, userID)` | Returns a single session with ownership check |
+| `ListAgents(userID)` | Returns agents (installed+enabled apps) for a user |
+| `MCPURL()` | Returns the MCP endpoint URL |
+
+### ToolService (`pkg/services/tools.go`)
+
+| Method | Description |
+|---|---|
+| `ResolveTool(userID, toolName)` | Finds a JS tool by namespaced name, returns configured runtime |
+| `CallTool(userID, toolName, params)` | Resolve + execute in one step |
+| `ListTools(userID)` | Returns all tools from user's installed apps |
+| `ListPrompts(userID)` | Returns all prompts from user's installed apps |
+| `GetPrompt(userID, name, args)` | Renders a prompt with argument substitution |
+
+### Prompt enrichment
+
+Every AI run goes through prompt enrichment before being sent to the provider:
+
+1. **Server memory** — shared context set by admin (e.g. deployment info, units)
+2. **User memory** — per-user context (e.g. preferences, team assignments)
+3. **App context** — auto-composed from installed apps: one line per app with description, plus per-tool descriptions from JS manifests and OpenAPI specs
+
+For API-based providers (Ollama, future OpenAI/Anthropic/Gemini), the memory and app context are passed as a `system` message, keeping the user's prompt clean in the `user` message. For CLI-based providers (Claude), everything is prepended to the prompt since the CLI doesn't expose a system message parameter.
+
+---
+
 ## AI provider system
 
 The server supports multiple AI providers through a unified `Runner` interface. See [MULTI-PROVIDER.md](MULTI-PROVIDER.md) for full details.
@@ -286,8 +326,20 @@ See [MCP.md](MCP.md) for full details.
 | `input_tokens` | int | Prompt tokens |
 | `output_tokens` | int | Completion tokens |
 | `tool_calls` | int | Number of tool invocations |
+| `tool_call_log` | []ToolCallEntry | Detailed per-tool records (name, duration, status, error, payload sizes) |
 | `user_id` | string | Owner |
 | `created_at` | time | |
+
+### ToolCallEntry
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Namespaced tool name (e.g. `rubix.query_nodes`) |
+| `duration_ms` | int | Time taken for this tool call |
+| `status` | string | `ok` or `error` |
+| `error` | string | Error message if status is `error` |
+| `input_bytes` | int | Request payload size |
+| `output_bytes` | int | Response payload size |
 
 ### AppInstall
 

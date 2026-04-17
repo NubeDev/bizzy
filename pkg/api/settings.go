@@ -13,23 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// resolveProvider returns the provider and model to use, applying user defaults if not specified.
-func resolveProvider(reqProvider, reqModel string, user models.User) (airunner.Provider, string) {
-	provider := airunner.Provider(reqProvider)
-	model := reqModel
-	if provider == "" {
-		if user.Preferences != nil && user.Preferences.DefaultProvider != "" {
-			provider = airunner.Provider(user.Preferences.DefaultProvider)
-		} else {
-			provider = airunner.ProviderClaude
-		}
-	}
-	if model == "" && user.Preferences != nil {
-		model = user.Preferences.DefaultModel
-	}
-	return provider, model
-}
-
 // --- Global provider config (admin-only) ---
 
 // getProviderConfig returns the global provider configuration.

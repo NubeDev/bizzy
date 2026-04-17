@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
 )
@@ -170,70 +170,54 @@ func (a *API) listWorkflowDefs(c *gin.Context) {
 
 // --- ToolCaller and PromptRunner bridges ---
 
-// WorkflowToolCaller bridges the workflow engine to the existing JS tool execution.
+// WorkflowToolCaller bridges the workflow engine to the ToolService.
 type WorkflowToolCaller struct {
-	api *API
+	ToolSvc *services.ToolService
 }
 
-func NewWorkflowToolCaller(a *API) *WorkflowToolCaller {
-	return &WorkflowToolCaller{api: a}
+func NewWorkflowToolCaller(toolSvc *services.ToolService) *WorkflowToolCaller {
+	return &WorkflowToolCaller{ToolSvc: toolSvc}
 }
 
 func (tc *WorkflowToolCaller) CallTool(ctx context.Context, userID, toolName string, params map[string]any) (any, error) {
-	user, ok := tc.api.Users.Get(userID)
-	if !ok {
-		return nil, fmt.Errorf("user not found: %s", userID)
-	}
-
-	runtime, manifest, err := tc.api.resolveJSTool(user, toolName)
+	result, err := tc.ToolSvc.CallTool(userID, toolName, params)
 	if err != nil {
 		return nil, fmt.Errorf("tool %s: %w", toolName, err)
-	}
-
-	result, err := runtime.Execute(manifest.ScriptPath, params)
-	if err != nil {
-		return nil, fmt.Errorf("tool %s failed: %w", toolName, err)
 	}
 	return result, nil
 }
 
-// WorkflowPromptRunner bridges the workflow engine to the AI runner.
+// WorkflowPromptRunner bridges the workflow engine to the AgentService.
 type WorkflowPromptRunner struct {
-	api *API
+	AgentSvc *services.AgentService
 }
 
-func NewWorkflowPromptRunner(a *API) *WorkflowPromptRunner {
-	return &WorkflowPromptRunner{api: a}
+func NewWorkflowPromptRunner(agentSvc *services.AgentService) *WorkflowPromptRunner {
+	return &WorkflowPromptRunner{AgentSvc: agentSvc}
 }
 
 func (pr *WorkflowPromptRunner) RunPrompt(ctx context.Context, userID, prompt string) (string, error) {
-	user, ok := pr.api.Users.Get(userID)
-	if !ok {
-		return "", fmt.Errorf("user not found: %s", userID)
+	user, err := pr.AgentSvc.GetUser(userID)
+	if err != nil {
+		return "", err
 	}
 
-	provider, model := resolveProvider("", "", user)
+	provider, model := pr.AgentSvc.ResolveProvider("", "", user)
 
-	runner, err := pr.api.Runners.Get(provider)
+	runner, err := pr.AgentSvc.GetRunner(provider)
 	if err != nil {
 		return "", fmt.Errorf("provider %s: %w", provider, err)
 	}
-	if !runner.Available() {
-		return "", fmt.Errorf("provider %s is not available", provider)
-	}
 
-	// Prepend memory.
-	if pr.api.Memory != nil {
-		if prefix := pr.api.Memory.BuildPromptPrefix(user.ID); prefix != "" {
-			prompt = prefix + prompt
-		}
-	}
+	systemPrompt := pr.AgentSvc.BuildSystemPrompt(user.ID)
+	prompt = pr.AgentSvc.EnrichPrompt(user.ID, prompt)
 
 	sessionID := models.GenerateID("ses-")
-	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+	mcpURL := pr.AgentSvc.MCPURL()
 
 	result := runner.Run(ctx, airunner.RunConfig{
 		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
 		MCPURL:       mcpURL,
 		MCPToken:     user.Token,
 		AllowedTools: "mcp__nube__*",

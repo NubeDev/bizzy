@@ -2,13 +2,13 @@ package api
 
 import (
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,8 +22,8 @@ type jobSubmitRequest struct {
 
 // jobSubmitResponse is returned immediately after submitting a job.
 type jobSubmitResponse struct {
-	JobID  string              `json:"job_id"`
-	Status airunner.JobStatus  `json:"status"`
+	JobID  string             `json:"job_id"`
+	Status airunner.JobStatus `json:"status"`
 }
 
 // submitJob creates a new async AI job.
@@ -38,17 +38,11 @@ func (a *API) submitJob(c *gin.Context) {
 		return
 	}
 
-	provider, model := resolveProvider(req.Provider, req.Model, user)
+	provider, model := a.AgentSvc.ResolveProvider(req.Provider, req.Model, user)
 
-	runner, err := a.Runners.Get(provider)
+	runner, err := a.AgentSvc.GetRunner(provider)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if !runner.Available() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": string(provider) + " is not available",
-		})
 		return
 	}
 
@@ -59,26 +53,12 @@ func (a *API) submitJob(c *gin.Context) {
 		}
 	}
 
-	// Prepend memory (server + user) and app context to the prompt.
-	prompt := req.Prompt
-	if a.Memory != nil {
-		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
-			prompt = prefix + prompt
-		}
-	}
-	// Inject installed app/tool descriptions so the AI knows what tools are available.
-	if a.MCPFactory != nil {
-		installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-			return ai.UserID == user.ID && ai.Enabled
-		})
-		if appCtx := a.MCPFactory.BuildAppContext(installs); appCtx != "" {
-			prompt = appCtx + prompt
-		}
-	}
+	systemPrompt := a.AgentSvc.BuildSystemPrompt(user.ID)
+	prompt := a.AgentSvc.EnrichPrompt(user.ID, req.Prompt)
 
 	jobID := models.GenerateID("job-")
 	sessionID := models.GenerateID("ses-")
-	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+	mcpURL := a.AgentSvc.MCPURL()
 
 	job := a.Jobs.Submit(
 		jobID,
@@ -87,6 +67,7 @@ func (a *API) submitJob(c *gin.Context) {
 		runner,
 		airunner.RunConfig{
 			Prompt:       prompt,
+			SystemPrompt: systemPrompt,
 			MCPURL:       mcpURL,
 			MCPToken:     user.Token,
 			AllowedTools: "mcp__nube__*",
@@ -98,30 +79,19 @@ func (a *API) submitJob(c *gin.Context) {
 
 	// Persist session asynchronously when the job finishes.
 	go func() {
-		// Poll until the job is done.
 		for {
 			time.Sleep(500 * time.Millisecond)
 			result := job.Result()
 			if result == nil {
 				continue
 			}
-			a.Sessions.Create(models.Session{
-				ID:              sessionID,
-				Provider:        result.Provider,
-				Model:           result.Model,
-				ClaudeSessionID: result.ClaudeSessionID,
-				Agent:           req.Agent,
-				Prompt:          req.Prompt,
-				Result:          result.Text,
-				Status:          string(job.Status),
-				DurationMS:      result.DurationMS,
-				CostUSD:         result.CostUSD,
-				InputTokens:     result.InputTokens,
-				OutputTokens:    result.OutputTokens,
-				ToolCalls:       result.ToolCalls,
-				ToolCallLog:     convertToolCallLog(result.ToolCallLog),
-				UserID:          user.ID,
-				CreatedAt:       time.Now().UTC(),
+			a.AgentSvc.SaveSession(services.SessionParams{
+				ID:        sessionID,
+				Agent:     req.Agent,
+				Prompt:    req.Prompt,
+				UserID:    user.ID,
+				JobStatus: string(job.Status),
+				Result:    result,
 			})
 			return
 		}

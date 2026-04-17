@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"time"
 
+	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/claude"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -116,11 +116,13 @@ func (a *API) runQAWS(c *gin.Context) {
 	}
 
 	// Resolve the JS tool.
-	runtime, manifest, err := a.resolveJSTool(user, req.Flow)
+	resolved, err := a.ToolSvc.ResolveTool(user.ID, req.Flow)
 	if err != nil {
 		sendQAError(conn, sessionID, err.Error())
 		return
 	}
+	runtime := resolved.Runtime
+	manifest := resolved.Manifest
 
 	// Q&A loop: call JS tool → get question or prompt → repeat.
 	answers := make(map[string]any)
@@ -182,7 +184,7 @@ func (a *API) runQAWS(c *gin.Context) {
 			}
 			conn.WriteJSON(genEvent)
 
-			mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+			mcpURL := a.AgentSvc.MCPURL()
 			claudeResult := claude.Run(c.Request.Context(), claude.RunConfig{
 				Prompt:       prompt,
 				MCPURL:       mcpURL,
@@ -205,18 +207,19 @@ func (a *API) runQAWS(c *gin.Context) {
 			// Build the full prompt with answers for the session record.
 			answersJSON, _ := json.Marshal(answers)
 
-			a.Sessions.Create(models.Session{
-				ID:              sessionID,
-				Provider:        "claude",
-				ClaudeSessionID: claudeResult.ClaudeSessionID,
-				Agent:           manifest.AppName,
-				Prompt:          string(answersJSON),
-				Result:          claudeResult.Text,
-				Status:          "done",
-				DurationMS:      claudeResult.DurationMS,
-				CostUSD:         claudeResult.CostUSD,
-				UserID:          user.ID,
-				CreatedAt:       time.Now().UTC(),
+			a.AgentSvc.SaveSession(services.SessionParams{
+				ID:        sessionID,
+				Agent:     manifest.AppName,
+				Prompt:    string(answersJSON),
+				UserID:    user.ID,
+				JobStatus: "done",
+				Result: &airunner.RunResult{
+					Text:            claudeResult.Text,
+					Provider:        "claude",
+					ClaudeSessionID: claudeResult.ClaudeSessionID,
+					DurationMS:      claudeResult.DurationMS,
+					CostUSD:         claudeResult.CostUSD,
+				},
 			})
 
 			conn.WriteMessage(

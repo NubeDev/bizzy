@@ -2,12 +2,11 @@ package api
 
 import (
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,36 +41,16 @@ func (a *API) runAgentREST(c *gin.Context) {
 		return
 	}
 
-	provider, model := resolveProvider(req.Provider, req.Model, user)
+	provider, model := a.AgentSvc.ResolveProvider(req.Provider, req.Model, user)
 
-	runner, err := a.Runners.Get(provider)
+	runner, err := a.AgentSvc.GetRunner(provider)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !runner.Available() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": string(provider) + " CLI is not installed or not in PATH",
-		})
-		return
-	}
 
-	// Prepend memory (server + user) and app context to the prompt.
-	prompt := req.Prompt
-	if a.Memory != nil {
-		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
-			prompt = prefix + prompt
-		}
-	}
-	// Inject installed app/tool descriptions so the AI knows what tools are available.
-	if a.MCPFactory != nil {
-		installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-			return ai.UserID == user.ID && ai.Enabled
-		})
-		if appCtx := a.MCPFactory.BuildAppContext(installs); appCtx != "" {
-			prompt = appCtx + prompt
-		}
-	}
+	systemPrompt := a.AgentSvc.BuildSystemPrompt(user.ID)
+	prompt := a.AgentSvc.EnrichPrompt(user.ID, req.Prompt)
 
 	if req.Agent != "" {
 		if _, exists := a.AppRegistry.Get(req.Agent); !exists {
@@ -81,12 +60,13 @@ func (a *API) runAgentREST(c *gin.Context) {
 	}
 
 	sessionID := models.GenerateID("ses-")
-	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+	mcpURL := a.AgentSvc.MCPURL()
 
 	// Collect events (the caller gets the final result, not a stream).
 	var events []airunner.Event
 	result := runner.Run(c.Request.Context(), airunner.RunConfig{
 		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
 		MCPURL:       mcpURL,
 		MCPToken:     user.Token,
 		AllowedTools: "mcp__nube__*",
@@ -96,23 +76,13 @@ func (a *API) runAgentREST(c *gin.Context) {
 	})
 
 	// Persist session.
-	a.Sessions.Create(models.Session{
-		ID:              sessionID,
-		Provider:        result.Provider,
-		Model:           result.Model,
-		ClaudeSessionID: result.ClaudeSessionID,
-		Agent:           req.Agent,
-		Prompt:          req.Prompt,
-		Result:          result.Text,
-		Status:          "done",
-		DurationMS:      result.DurationMS,
-		CostUSD:         result.CostUSD,
-		InputTokens:     result.InputTokens,
-		OutputTokens:    result.OutputTokens,
-		ToolCalls:       result.ToolCalls,
-		ToolCallLog:     convertToolCallLog(result.ToolCallLog),
-		UserID:          user.ID,
-		CreatedAt:       time.Now().UTC(),
+	a.AgentSvc.SaveSession(services.SessionParams{
+		ID:        sessionID,
+		Agent:     req.Agent,
+		Prompt:    req.Prompt,
+		UserID:    user.ID,
+		JobStatus: "done",
+		Result:    &result,
 	})
 
 	c.JSON(http.StatusOK, runAgentResponse{

@@ -3,12 +3,12 @@ package api
 import (
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -106,26 +106,13 @@ func (a *API) runAgentWS(c *gin.Context) {
 		}
 	}
 
-	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+	mcpURL := a.AgentSvc.MCPURL()
 
-	// Prepend memory (server + user) and app context to the prompt.
-	prompt := req.Prompt
-	if a.Memory != nil {
-		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
-			prompt = prefix + prompt
-		}
-	}
-	// Inject installed app/tool descriptions so the AI knows what tools are available.
-	if a.MCPFactory != nil {
-		installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-			return ai.UserID == user.ID && ai.Enabled
-		})
-		if appCtx := a.MCPFactory.BuildAppContext(installs); appCtx != "" {
-			prompt = appCtx + prompt
-		}
-	}
+	// Build system context (memory + app descriptions) and enriched prompt.
+	systemPrompt := a.AgentSvc.BuildSystemPrompt(user.ID)
+	prompt := a.AgentSvc.EnrichPrompt(user.ID, req.Prompt)
 
-	provider, model := resolveProvider(req.Provider, req.Model, user)
+	provider, model := a.AgentSvc.ResolveProvider(req.Provider, req.Model, user)
 	log.Printf("[agents-ws] using provider: %s", provider)
 
 	runner, runnerErr := a.Runners.Get(provider)
@@ -156,6 +143,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 		runner,
 		airunner.RunConfig{
 			Prompt:       prompt,
+			SystemPrompt: systemPrompt,
 			ResumeID:     req.SessionID,
 			MCPURL:       mcpURL,
 			MCPToken:     user.Token,
@@ -214,24 +202,14 @@ func (a *API) runAgentWS(c *gin.Context) {
 	}
 	log.Printf("[agents-ws] %s finished: %d events, %dms, $%.4f", provider, eventCount, result.DurationMS, result.CostUSD)
 
-	// Persist session to disk.
-	a.Sessions.Create(models.Session{
-		ID:              sessionID,
-		Provider:        result.Provider,
-		Model:           result.Model,
-		ClaudeSessionID: result.ClaudeSessionID,
-		Agent:           req.Agent,
-		Prompt:          req.Prompt,
-		Result:          result.Text,
-		Status:          string(job.Status),
-		DurationMS:      result.DurationMS,
-		CostUSD:         result.CostUSD,
-		InputTokens:     result.InputTokens,
-		OutputTokens:    result.OutputTokens,
-		ToolCalls:       result.ToolCalls,
-		ToolCallLog:     convertToolCallLog(result.ToolCallLog),
-		UserID:          user.ID,
-		CreatedAt:       time.Now().UTC(),
+	// Persist session.
+	a.AgentSvc.SaveSession(services.SessionParams{
+		ID:        sessionID,
+		Agent:     req.Agent,
+		Prompt:    req.Prompt,
+		UserID:    user.ID,
+		JobStatus: string(job.Status),
+		Result:    result,
 	})
 
 	conn.WriteMessage(
@@ -242,25 +220,6 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 func sendWSError(conn *websocket.Conn, sessionID, msg string) {
 	conn.WriteJSON(airunner.Event{Type: "error", SessionID: sessionID, Error: msg})
-}
-
-// convertToolCallLog converts airunner.ToolCallEntry to models.ToolCallEntry.
-func convertToolCallLog(entries []airunner.ToolCallEntry) []models.ToolCallEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]models.ToolCallEntry, len(entries))
-	for i, e := range entries {
-		out[i] = models.ToolCallEntry{
-			Name:        e.Name,
-			DurationMS:  e.DurationMS,
-			Status:      e.Status,
-			Error:       e.Error,
-			InputBytes:  e.InputBytes,
-			OutputBytes: e.OutputBytes,
-		}
-	}
-	return out
 }
 
 // --- Session history REST endpoints ---
@@ -286,10 +245,7 @@ type sessionSummary struct {
 // listSessions returns session history for the authenticated user.
 func (a *API) listSessions(c *gin.Context) {
 	user := auth.GetUser(c)
-
-	all := a.Sessions.FindFunc(func(s models.Session) bool {
-		return s.UserID == user.ID
-	})
+	all := a.AgentSvc.ListSessions(user.ID)
 
 	out := make([]sessionSummary, 0, len(all))
 	for _, s := range all {
@@ -319,8 +275,8 @@ func (a *API) getSession(c *gin.Context) {
 	user := auth.GetUser(c)
 	id := c.Param("id")
 
-	s, ok := a.Sessions.Get(id)
-	if !ok || s.UserID != user.ID {
+	s, err := a.AgentSvc.GetSession(id, user.ID)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}

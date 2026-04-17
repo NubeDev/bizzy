@@ -27,6 +27,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,13 +71,30 @@ func setupEnv(t *testing.T) *testEnv {
 	}
 	mcpFactory := apps.NewMCPFactory(registry)
 
+	runners := airunner.NewRegistry()
+	agentSvc := &services.AgentService{
+		MCPFactory:  mcpFactory,
+		AppInstalls: appInstalls,
+		Users:       users,
+		Runners:     runners,
+		Jobs:        airunner.NewJobStore(),
+		AppRegistry: registry,
+	}
+	toolSvc := &services.ToolService{
+		AppInstalls: appInstalls,
+		AppRegistry: registry,
+	}
+
 	a := &api.API{
 		Workspaces:  workspaces,
 		Users:       users,
 		AppInstalls: appInstalls,
 		AppRegistry: registry,
 		MCPFactory:  mcpFactory,
-		Runners:     airunner.NewRegistry(),
+		Runners:     runners,
+		Jobs:        agentSvc.Jobs,
+		AgentSvc:    agentSvc,
+		ToolSvc:     toolSvc,
 	}
 
 	router := a.SetupRouter()
