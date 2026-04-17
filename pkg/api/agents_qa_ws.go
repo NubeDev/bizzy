@@ -73,25 +73,18 @@ func (a *API) runQAWS(c *gin.Context) {
 	token := c.Query("token")
 
 	var user models.User
-	var ok bool
 
 	if token == "" || token == "dev" {
 		// Dev mode: use the first user (same as REST auth middleware).
-		all := a.Users.All()
-		if len(all) == 0 {
+		if err := a.DB.First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users exist"})
 			return
 		}
-		user = all[0]
-		ok = true
 	} else {
-		user, ok = a.Users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-	}
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-		return
+		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
 	}
 
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)

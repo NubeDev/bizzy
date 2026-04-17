@@ -14,7 +14,7 @@ type ToolCallEntry struct {
 
 // Session records a single agent run.
 type Session struct {
-	ID              string          `json:"id"`
+	ID              string          `json:"id" gorm:"primaryKey"`
 	Provider        string          `json:"provider"`                    // "claude", "ollama", "openai", "anthropic", "gemini"
 	Model           string          `json:"model,omitempty"`             // e.g. "claude-sonnet-4-20250514", "gemma4", "gpt-4.1"
 	ClaudeSessionID string          `json:"claude_session_id,omitempty"` // Claude CLI session ID for --resume
@@ -27,9 +27,7 @@ type Session struct {
 	InputTokens     int             `json:"input_tokens,omitempty"`
 	OutputTokens    int             `json:"output_tokens,omitempty"`
 	ToolCalls       int             `json:"tool_calls,omitempty"`
-	ToolCallLog     []ToolCallEntry `json:"tool_call_log,omitempty"`
-	UserID          string          `json:"user_id"`
-	CreatedAt       time.Time       `json:"created_at"`
+	ToolCallLog     []ToolCallEntry `json:"tool_call_log,omitempty" gorm:"serializer:json"`
+	UserID          string          `json:"user_id" gorm:"index"`
+	CreatedAt       time.Time       `json:"created_at" gorm:"index"`
 }
-
-func (s Session) GetID() string { return s.ID }

@@ -19,7 +19,7 @@ import (
 //
 //	GET /api/settings/providers
 func (a *API) getProviderConfig(c *gin.Context) {
-	cfg := a.ProviderConfig.Get()
+	cfg := a.ProviderConfigGet()
 
 	// Build response with availability info merged in.
 	type providerView struct {
@@ -67,14 +67,14 @@ func (a *API) updateProviderConfig(c *gin.Context) {
 	}
 
 	// Merge with existing config: only update fields that are present.
-	existing := a.ProviderConfig.Get()
+	existing := a.ProviderConfigGet()
 	if req.Providers != nil {
 		for name, settings := range req.Providers {
 			existing.Providers[name] = settings
 		}
 	}
 
-	if err := a.ProviderConfig.Set(existing); err != nil {
+	if err := a.ProviderConfigSet(existing); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save: " + err.Error()})
 		return
 	}
@@ -135,7 +135,7 @@ func (a *API) updateUserPreferences(c *gin.Context) {
 	}
 
 	user.Preferences = &prefs
-	if err := a.Users.Update(user); err != nil {
+	if err := a.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save: " + err.Error()})
 		return
 	}

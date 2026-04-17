@@ -10,20 +10,18 @@ import (
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/apps"
-	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"gorm.io/gorm"
 )
 
 // AgentService handles prompt enrichment, provider resolution, and session management.
 // It extracts business logic that was previously duplicated across WebSocket, REST,
 // and job handlers into a single reusable layer.
 type AgentService struct {
+	DB          *gorm.DB
 	Memory      *memory.Store
 	MCPFactory  *apps.MCPFactory
-	AppInstalls *jsondb.Collection[models.AppInstall]
-	Sessions    *jsondb.Collection[models.Session]
-	Users       *jsondb.Collection[models.User]
 	Runners     *airunner.Registry
 	Jobs        *airunner.JobStore
 	AppRegistry *apps.Registry
@@ -115,7 +113,7 @@ type SessionParams struct {
 
 // SaveSession persists a completed AI session.
 func (s *AgentService) SaveSession(p SessionParams) error {
-	return s.Sessions.Create(models.Session{
+	session := models.Session{
 		ID:              p.ID,
 		Provider:        p.Result.Provider,
 		Model:           p.Result.Model,
@@ -132,20 +130,22 @@ func (s *AgentService) SaveSession(p SessionParams) error {
 		ToolCallLog:     convertToolCallLog(p.Result.ToolCallLog),
 		UserID:          p.UserID,
 		CreatedAt:       time.Now().UTC(),
-	})
+	}
+	return s.DB.Create(&session).Error
 }
 
 // ListSessions returns all sessions for a user.
 func (s *AgentService) ListSessions(userID string) []models.Session {
-	return s.Sessions.FindFunc(func(ses models.Session) bool {
-		return ses.UserID == userID
-	})
+	var sessions []models.Session
+	s.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&sessions)
+	return sessions
 }
 
 // GetSession returns a single session, validating ownership.
 func (s *AgentService) GetSession(sessionID, userID string) (models.Session, error) {
-	ses, ok := s.Sessions.Get(sessionID)
-	if !ok || ses.UserID != userID {
+	var ses models.Session
+	result := s.DB.First(&ses, "id = ? AND user_id = ?", sessionID, userID)
+	if result.Error != nil {
 		return models.Session{}, fmt.Errorf("session not found")
 	}
 	return ses, nil
@@ -153,8 +153,8 @@ func (s *AgentService) GetSession(sessionID, userID string) (models.Session, err
 
 // GetUser returns a user by ID.
 func (s *AgentService) GetUser(userID string) (models.User, error) {
-	user, ok := s.Users.Get(userID)
-	if !ok {
+	var user models.User
+	if err := s.DB.First(&user, "id = ?", userID).Error; err != nil {
 		return models.User{}, fmt.Errorf("user not found: %s", userID)
 	}
 	return user, nil
@@ -162,9 +162,9 @@ func (s *AgentService) GetUser(userID string) (models.User, error) {
 
 // UserEnabledInstalls returns the user's enabled app installs.
 func (s *AgentService) UserEnabledInstalls(userID string) []models.AppInstall {
-	return s.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == userID && ai.Enabled
-	})
+	var installs []models.AppInstall
+	s.DB.Where("user_id = ? AND enabled = ?", userID, true).Find(&installs)
+	return installs
 }
 
 // AgentInfo describes an agent derived from an installed app.

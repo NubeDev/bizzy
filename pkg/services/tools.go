@@ -6,15 +6,15 @@ import (
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/apps"
-	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"gorm.io/gorm"
 )
 
 // ToolService handles tool resolution, execution, and listing.
 // It extracts business logic that was previously in agents_qa.go, tools.go,
 // and workflows.go into a single reusable layer.
 type ToolService struct {
-	AppInstalls *jsondb.Collection[models.AppInstall]
+	DB          *gorm.DB
 	AppRegistry *apps.Registry
 }
 
@@ -24,12 +24,17 @@ type ResolvedTool struct {
 	Manifest *apps.ToolManifest
 }
 
+// userEnabledInstalls returns the user's enabled app installs.
+func (s *ToolService) userEnabledInstalls(userID string) []models.AppInstall {
+	var installs []models.AppInstall
+	s.DB.Where("user_id = ? AND enabled = ?", userID, true).Find(&installs)
+	return installs
+}
+
 // ResolveTool finds a JS tool by namespaced name (e.g. "rubix.query_nodes")
 // and returns a configured runtime ready for execution.
 func (s *ToolService) ResolveTool(userID, toolName string) (*ResolvedTool, error) {
-	installs := s.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == userID && ai.Enabled
-	})
+	installs := s.userEnabledInstalls(userID)
 
 	for _, inst := range installs {
 		app, ok := s.AppRegistry.Get(inst.AppName)
@@ -106,9 +111,7 @@ type ParamInfo struct {
 
 // ListTools returns all MCP tools available to a user based on their installed apps.
 func (s *ToolService) ListTools(userID string) []ToolInfo {
-	installs := s.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == userID && ai.Enabled
-	})
+	installs := s.userEnabledInstalls(userID)
 
 	tools := make([]ToolInfo, 0)
 	for _, inst := range installs {
@@ -167,9 +170,7 @@ type PromptArgInfo struct {
 
 // ListPrompts returns all MCP prompts available to a user.
 func (s *ToolService) ListPrompts(userID string) []PromptInfo {
-	installs := s.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == userID && ai.Enabled
-	})
+	installs := s.userEnabledInstalls(userID)
 
 	prompts := make([]PromptInfo, 0)
 	for _, inst := range installs {
@@ -200,9 +201,7 @@ type RenderedPrompt struct {
 
 // GetPrompt finds and renders a prompt with the given arguments.
 func (s *ToolService) GetPrompt(userID, promptName string, args map[string]string) (*RenderedPrompt, error) {
-	installs := s.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == userID && ai.Enabled
-	})
+	installs := s.userEnabledInstalls(userID)
 
 	for _, inst := range installs {
 		for _, p := range s.AppRegistry.GetPrompts(inst.AppName) {

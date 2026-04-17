@@ -1,0 +1,466 @@
+[
+  {
+    "id": "app-b82f94ebe246d9af",
+    "name": "nube-admin",
+    "displayName": "nube-admin",
+    "description": "Admin tools — create and manage skills, apps, and platform configuration.",
+    "longDescription": "",
+    "version": "1.0.0",
+    "icon": "",
+    "color": "",
+    "category": "utilities",
+    "tags": [
+      "admin",
+      "platform"
+    ],
+    "authorId": "system",
+    "authorName": "NubeIO",
+    "workspaceId": "",
+    "visibility": "public",
+    "permissions": {
+      "allowedHosts": [
+        "localhost:*"
+      ],
+      "defaultToolClass": "read-write",
+      "secrets": null
+    },
+    "settings": [],
+    "tools": [
+      {
+        "name": "create_skill_qa",
+        "description": "Guided skill builder — walk through creating a new app with a QA tool, prompt template, and auto-generated JS.",
+        "toolClass": "read-write",
+        "mode": "qa",
+        "params": null,
+        "script": ""
+      }
+    ],
+    "prompts": [],
+    "installCount": 0,
+    "activeInstalls": 0,
+    "avgRating": 0,
+    "reviewCount": 0,
+    "createdAt": "2026-04-15T21:53:17.316517745Z",
+    "updatedAt": "2026-04-15T21:53:17.316517745Z",
+    "publishedAt": "2026-04-15T21:53:17.316517745Z"
+  },
+  {
+    "id": "app-f005675caeb6e0f0",
+    "name": "nube-marketing",
+    "displayName": "nube-marketing",
+    "description": "Marketing plan templates and content review prompts",
+    "longDescription": "",
+    "version": "1.0.0",
+    "icon": "",
+    "color": "",
+    "category": "marketing",
+    "tags": [
+      "marketing",
+      "content"
+    ],
+    "authorId": "system",
+    "authorName": "NubeIO",
+    "workspaceId": "",
+    "visibility": "public",
+    "permissions": {
+      "allowedHosts": [],
+      "defaultToolClass": "read-only",
+      "secrets": null
+    },
+    "settings": [],
+    "tools": [
+      {
+        "name": "content_review",
+        "description": "Review marketing content for quality, tone, and technical accuracy in IoT/BMS context.",
+        "toolClass": "read-only",
+        "params": null,
+        "script": ""
+      },
+      {
+        "name": "content_review_qa",
+        "description": "Guided content review — collects content and review preferences then generates feedback.",
+        "toolClass": "read-only",
+        "mode": "qa",
+        "params": null,
+        "script": ""
+      },
+      {
+        "name": "marketing_plan",
+        "description": "Generate a marketing plan for a NubeIO product or feature. Returns a structured prompt for B2B IoT/building automation buyers.",
+        "toolClass": "read-only",
+        "params": null,
+        "script": ""
+      },
+      {
+        "name": "marketing_plan_qa",
+        "description": "Guided marketing plan builder — collects requirements then generates a plan.",
+        "toolClass": "read-only",
+        "mode": "qa",
+        "params": null,
+        "script": ""
+      }
+    ],
+    "prompts": [
+      {
+        "name": "content_review",
+        "description": "Review marketing content for quality, tone, and accuracy",
+        "arguments": [
+          {
+            "name": "content",
+            "description": "The content to review",
+            "required": true
+          }
+        ],
+        "body": "Review the following marketing content for NubeIO:\n\n{{content}}\n\nCheck for:\n- Technical accuracy (IoT/BMS terminology)\n- Tone consistency (professional but approachable)\n- Clear value proposition\n- Call to action\n- Grammar and readability\n\nProvide specific suggestions for improvement."
+      },
+      {
+        "name": "marketing_plan",
+        "description": "Generate a marketing plan for a NubeIO product or feature",
+        "arguments": [
+          {
+            "name": "product",
+            "description": "The product or feature to market",
+            "required": true
+          },
+          {
+            "name": "audience",
+            "description": "Target audience",
+            "required": false
+          }
+        ],
+        "body": "Create a marketing plan for **{{product}}**.\n\nTarget audience: {{audience}}\n\nInclude:\n1. Key messaging and value propositions\n2. Channel strategy (content, social, email, events)\n3. Timeline with milestones\n4. Success metrics and KPIs\n\nFocus on B2B IoT/building automation buyers. Keep it practical and actionable."
+      }
+    ],
+    "installCount": 0,
+    "activeInstalls": 0,
+    "avgRating": 0,
+    "reviewCount": 0,
+    "createdAt": "2026-04-15T21:53:17.316677755Z",
+    "updatedAt": "2026-04-15T21:53:17.316677755Z",
+    "publishedAt": "2026-04-15T21:53:17.316677755Z"
+  },
+  {
+    "id": "app-213a46cc6edcfb51",
+    "name": "rubix-developer",
+    "displayName": "rubix-developer",
+    "description": "Tools and prompts for Rubix platform development",
+    "longDescription": "",
+    "version": "1.0.0",
+    "icon": "",
+    "color": "",
+    "category": "utilities",
+    "tags": [
+      "rubix",
+      "development"
+    ],
+    "authorId": "system",
+    "authorName": "NubeIO",
+    "workspaceId": "",
+    "visibility": "public",
+    "permissions": {
+      "allowedHosts": [
+        "*.nubedge.com",
+        "localhost:*"
+      ],
+      "defaultToolClass": "read-write",
+      "secrets": null
+    },
+    "settings": [
+      {
+        "key": "rubix_host",
+        "label": "Rubix Host URL",
+        "type": "url",
+        "required": true,
+        "default": "http://localhost:9000"
+      },
+      {
+        "key": "rubix_token",
+        "label": "API Token",
+        "type": "secret",
+        "required": false,
+        "default": ""
+      }
+    ],
+    "tools": [
+      {
+        "name": "device_summary",
+        "description": "Get a summary of all devices — total count, online vs offline. Calls the Rubix device API and aggregates the results.",
+        "toolClass": "read-only",
+        "params": null,
+        "script": ""
+      },
+      {
+        "name": "restart_device",
+        "description": "Restart a device by ID. Sends a PATCH to set the device to maintenance mode, then back to active.",
+        "toolClass": "destructive",
+        "params": null,
+        "script": ""
+      }
+    ],
+    "prompts": [
+      {
+        "name": "debug_network",
+        "description": "Debug network issues on a Rubix controller",
+        "arguments": [
+          {
+            "name": "device_id",
+            "description": "The device to debug",
+            "required": true
+          },
+          {
+            "name": "symptom",
+            "description": "What is happening (e.g. offline, slow, timeout)",
+            "required": false
+          }
+        ],
+        "body": "You are debugging a network issue on device **{{device_id}}**.\n\nSymptom: {{symptom}}\n\nFollow this checklist:\n1. Check if the device is online (use the device API)\n2. Check the device's IP and gateway configuration\n3. Ping the device gateway\n4. Check for recent error logs\n5. Verify MQTT broker connectivity\n6. Check network interface status\n\nReport findings and recommend a fix."
+      }
+    ],
+    "installCount": 0,
+    "activeInstalls": 0,
+    "avgRating": 0,
+    "reviewCount": 0,
+    "createdAt": "2026-04-15T21:53:17.325110994Z",
+    "updatedAt": "2026-04-15T21:53:17.325110994Z",
+    "publishedAt": "2026-04-15T21:53:17.325110994Z"
+  },
+  {
+    "id": "app-5ea6f8fa2ec1044e",
+    "name": "weather-checker",
+    "displayName": "Weather Checker",
+    "description": "Check current weather conditions for any city using Open-Meteo free API. Get temperature, humidity, wind speed, and weather descriptions in real time.",
+    "longDescription": "Weather Checker uses the free Open-Meteo API to fetch real-time weather data for any city worldwide.\n\nFeatures:\n- Get current temperature, humidity, and wind speed\n- Weather condition descriptions (clear, cloudy, rain, snow, etc.)\n- Geocoding built-in — just type a city name\n- No API key required",
+    "version": "1.0.0",
+    "icon": "",
+    "color": "#2563eb",
+    "category": "utilities",
+    "tags": [],
+    "authorId": "usr-2d1a32a2a3c9c373",
+    "authorName": "Admin",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "visibility": "public",
+    "permissions": {
+      "allowedHosts": [
+        "api.open-meteo.com",
+        "geocoding-api.open-meteo.com"
+      ],
+      "defaultToolClass": "read-only",
+      "secrets": null
+    },
+    "settings": [],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get current weather for a city. Returns temperature, humidity, wind speed, and conditions.",
+        "toolClass": "read-only",
+        "params": {
+          "city": {
+            "type": "string",
+            "required": true,
+            "description": "City name (e.g. Sydney, London, New York)"
+          }
+        },
+        "script": "function handle(params) {\n  var geo = http.get(\"https://geocoding-api.open-meteo.com/v1/search?name=\" + encodeURIComponent(params.city) + \"\u0026count=1\");\n  if (!geo.json || !geo.json.results || geo.json.results.length === 0) {\n    return { error: \"City not found: \" + params.city };\n  }\n  var loc = geo.json.results[0];\n  var lat = loc.latitude;\n  var lon = loc.longitude;\n  var url = \"https://api.open-meteo.com/v1/forecast?latitude=\" + lat + \"\u0026longitude=\" + lon + \"\u0026current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code\u0026timezone=auto\";\n  var wx = http.get(url);\n  if (!wx.json || !wx.json.current) {\n    return { error: \"Failed to fetch weather data\" };\n  }\n  var c = wx.json.current;\n  var codes = {0:\"Clear sky\",1:\"Mainly clear\",2:\"Partly cloudy\",3:\"Overcast\",45:\"Foggy\",48:\"Rime fog\",51:\"Light drizzle\",53:\"Moderate drizzle\",55:\"Dense drizzle\",61:\"Slight rain\",63:\"Moderate rain\",65:\"Heavy rain\",71:\"Slight snow\",73:\"Moderate snow\",75:\"Heavy snow\",80:\"Slight showers\",81:\"Moderate showers\",82:\"Violent showers\",95:\"Thunderstorm\",96:\"Thunderstorm with hail\",99:\"Thunderstorm with heavy hail\"};\n  return {\n    city: loc.name,\n    country: loc.country,\n    latitude: lat,\n    longitude: lon,\n    temperature_c: c.temperature_2m,\n    humidity_pct: c.relative_humidity_2m,\n    wind_speed_kmh: c.wind_speed_10m,\n    conditions: codes[c.weather_code] || \"Unknown (\" + c.weather_code + \")\"\n  };\n}"
+      },
+      {
+        "name": "trip_planner",
+        "description": "Plan a trip based on live weather. Gets weather for a city, then suggests activities, what to pack, and rates the day for outdoor plans.",
+        "toolClass": "read-only",
+        "params": {
+          "activity": {
+            "type": "string",
+            "required": false,
+            "description": "Preferred activity type: beach, hiking, sightseeing, skiing (optional)"
+          },
+          "city": {
+            "type": "string",
+            "required": true,
+            "description": "City to plan a trip for"
+          }
+        },
+        "script": "function handle(params) {\n  var geo = http.get(\"https://geocoding-api.open-meteo.com/v1/search?name=\" + encodeURIComponent(params.city) + \"\u0026count=1\");\n  if (!geo.json || !geo.json.results || geo.json.results.length === 0) {\n    return { error: \"City not found: \" + params.city };\n  }\n  var loc = geo.json.results[0];\n  var url = \"https://api.open-meteo.com/v1/forecast?latitude=\" + loc.latitude + \"\u0026longitude=\" + loc.longitude + \"\u0026current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,apparent_temperature\u0026daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code\u0026timezone=auto\u0026forecast_days=3\";\n  var wx = http.get(url);\n  if (!wx.json || !wx.json.current) return { error: \"Failed to fetch weather\" };\n  var c = wx.json.current;\n  var codes = {0:\"Clear sky\",1:\"Mainly clear\",2:\"Partly cloudy\",3:\"Overcast\",45:\"Foggy\",48:\"Rime fog\",51:\"Light drizzle\",53:\"Moderate drizzle\",55:\"Dense drizzle\",61:\"Slight rain\",63:\"Moderate rain\",65:\"Heavy rain\",71:\"Slight snow\",73:\"Moderate snow\",75:\"Heavy snow\",80:\"Slight showers\",81:\"Moderate showers\",82:\"Violent showers\",95:\"Thunderstorm\",96:\"Thunderstorm with hail\",99:\"Thunderstorm with heavy hail\"};\n  var temp = c.temperature_2m;\n  var feels = c.apparent_temperature;\n  var humid = c.relative_humidity_2m;\n  var wind = c.wind_speed_10m;\n  var code = c.weather_code;\n  var cond = codes[code] || \"Unknown\";\n  var isRain = code \u003e= 51 \u0026\u0026 code \u003c= 82;\n  var isSnow = code \u003e= 71 \u0026\u0026 code \u003c= 75;\n  var isStorm = code \u003e= 95;\n  var isClear = code \u003c= 2;\n  var score = 10;\n  if (isStorm) score -= 6;\n  else if (isRain) score -= 3;\n  else if (isSnow) score -= 2;\n  if (temp \u003c 0) score -= 2;\n  else if (temp \u003c 10) score -= 1;\n  else if (temp \u003e 38) score -= 2;\n  if (wind \u003e 40) score -= 2;\n  else if (wind \u003e 25) score -= 1;\n  if (score \u003c 1) score = 1;\n  var rating = score \u003e= 8 ? \"Excellent\" : score \u003e= 6 ? \"Good\" : score \u003e= 4 ? \"Fair\" : \"Poor\";\n  var packing = [];\n  if (temp \u003c 10) packing.push(\"warm jacket\", \"layers\");\n  else if (temp \u003c 20) packing.push(\"light jacket\");\n  else packing.push(\"light clothing\");\n  if (isRain || isStorm) packing.push(\"umbrella\", \"rain jacket\");\n  if (isClear \u0026\u0026 temp \u003e 20) packing.push(\"sunscreen\", \"sunglasses\", \"hat\");\n  if (isSnow) packing.push(\"waterproof boots\", \"gloves\");\n  if (wind \u003e 25) packing.push(\"windbreaker\");\n  var activities = [];\n  var pref = (params.activity || \"\").toLowerCase();\n  if (pref === \"beach\") {\n    if (isClear \u0026\u0026 temp \u003e 24) activities.push({name: \"Beach day\", verdict: \"Perfect conditions!\"});\n    else if (temp \u003e 20 \u0026\u0026 !isRain) activities.push({name: \"Beach day\", verdict: \"Decent but not ideal\"});\n    else activities.push({name: \"Beach day\", verdict: \"Not recommended today\"});\n  } else if (pref === \"hiking\") {\n    if (!isStorm \u0026\u0026 !isRain \u0026\u0026 temp \u003e 5 \u0026\u0026 temp \u003c 35) activities.push({name: \"Hiking\", verdict: \"Good conditions\"});\n    else activities.push({name: \"Hiking\", verdict: \"Not recommended — check conditions\"});\n  } else if (pref === \"skiing\") {\n    if (isSnow || temp \u003c 5) activities.push({name: \"Skiing\", verdict: \"Great conditions!\"});\n    else activities.push({name: \"Skiing\", verdict: \"Too warm for skiing\"});\n  } else if (pref === \"sightseeing\") {\n    if (!isStorm) activities.push({name: \"Sightseeing\", verdict: isRain ? \"Bring an umbrella\" : \"Great day for it!\"});\n    else activities.push({name: \"Sightseeing\", verdict: \"Stay indoors — storm conditions\"});\n  }\n  if (isClear \u0026\u0026 temp \u003e= 15 \u0026\u0026 temp \u003c= 30) activities.push({name: \"Outdoor dining\", verdict: \"Recommended\"});\n  if (isClear \u0026\u0026 temp \u003e 24) activities.push({name: \"Beach / swimming\", verdict: \"Great conditions\"});\n  if (!isRain \u0026\u0026 !isStorm \u0026\u0026 temp \u003e 5) activities.push({name: \"Walking tour\", verdict: \"Good conditions\"});\n  if (isRain || isStorm) activities.push({name: \"Museums / indoor\", verdict: \"Recommended today\"});\n  if (isSnow) activities.push({name: \"Snow activities\", verdict: \"Conditions are right\"});\n  var forecast = [];\n  if (wx.json.daily) {\n    var d = wx.json.daily;\n    for (var i = 0; i \u003c d.time.length; i++) {\n      forecast.push({date: d.time[i], high: d.temperature_2m_max[i], low: d.temperature_2m_min[i], rain_mm: d.precipitation_sum[i], conditions: codes[d.weather_code[i]] || \"Unknown\"});\n    }\n  }\n  return {\n    city: loc.name, country: loc.country,\n    current: {temperature_c: temp, feels_like_c: feels, humidity_pct: humid, wind_kmh: wind, conditions: cond},\n    outdoor_score: {score: score, rating: rating, out_of: 10},\n    suggested_activities: activities,\n    packing_list: packing,\n    forecast_3day: forecast\n  };\n}"
+      },
+      {
+        "name": "travel_quiz_qa",
+        "description": "Guided travel safety quiz — asks your city and activity, fetches live weather, then quizzes you on what to do.",
+        "toolClass": "read-only",
+        "mode": "qa",
+        "params": {
+          "_submit": {
+            "type": "boolean",
+            "required": false,
+            "description": "Set true to submit answers"
+          },
+          "answer": {
+            "type": "string",
+            "required": false,
+            "description": "Your answer (A, B, C, or D)"
+          },
+          "city": {
+            "type": "string",
+            "required": false,
+            "description": "City name"
+          },
+          "scenario": {
+            "type": "string",
+            "required": false,
+            "description": "Activity type"
+          }
+        },
+        "script": "function handle(params) {\n  if (params._answers !== undefined) return chatMode(params._answers);\n  if (!params._submit) return formDefinition();\n  return formSubmit(params);\n}\n\nfunction chatMode(answers) {\n  if (!answers.city) {\n    return {\n      type: 'question', field: 'city',\n      label: 'What city are you visiting?',\n      input: 'text', required: true, min_length: 2,\n      placeholder: 'e.g. Sydney, London, Tokyo'\n    };\n  }\n  if (!answers.scenario) {\n    return {\n      type: 'question', field: 'scenario',\n      label: 'What activity are you planning in ' + answers.city + '?',\n      input: 'select', required: true,\n      options: [\n        {value: 'beach', label: 'Beach day'},\n        {value: 'hiking', label: 'Mountain hike'},\n        {value: 'picnic', label: 'Park picnic'},\n        {value: 'cycling', label: 'Bike ride'},\n        {value: 'running', label: 'Outdoor run'}\n      ]\n    };\n  }\n  var quiz = buildQuiz(answers.city, answers.scenario);\n  if (quiz.error) return quiz;\n  if (!answers.answer) {\n    return {\n      type: 'question', field: 'answer',\n      label: quiz.question,\n      input: 'select', required: true,\n      context: { weather: quiz.weather, city: quiz.city, country: quiz.country },\n      options: [\n        {value: 'A', label: quiz.options.A},\n        {value: 'B', label: quiz.options.B},\n        {value: 'C', label: quiz.options.C},\n        {value: 'D', label: quiz.options.D}\n      ]\n    };\n  }\n  var correct = quiz.correct_answer === answers.answer;\n  return {\n    type: 'result',\n    title: correct ? 'Correct!' : 'Not quite!',\n    city: quiz.city,\n    country: quiz.country,\n    weather: quiz.weather,\n    scenario: answers.scenario,\n    your_answer: answers.answer + ': ' + quiz.options[answers.answer],\n    correct_answer: quiz.correct_answer + ': ' + quiz.options[quiz.correct_answer],\n    is_correct: correct,\n    explanation: quiz.explanation\n  };\n}\n\nfunction formDefinition() {\n  return {\n    type: 'qa',\n    title: 'Travel Weather Quiz',\n    description: 'Test your travel smarts! We fetch live weather and quiz you on the safest decision.',\n    fields: [\n      {name: 'city', label: 'City', type: 'text', required: true, min_length: 2, placeholder: 'e.g. Sydney'},\n      {name: 'scenario', label: 'Activity', type: 'select', required: true, options: [\n        {value: 'beach', label: 'Beach day'}, {value: 'hiking', label: 'Mountain hike'},\n        {value: 'picnic', label: 'Park picnic'}, {value: 'cycling', label: 'Bike ride'},\n        {value: 'running', label: 'Outdoor run'}\n      ]},\n      {name: 'answer', label: 'Your answer (shown after weather loads)', type: 'text', required: false}\n    ]\n  };\n}\n\nfunction formSubmit(params) {\n  if (!params.city || params.city.length \u003c 2) return {type: 'validation_error', errors: [{field: 'city', message: 'City is required'}]};\n  if (!params.scenario) return {type: 'validation_error', errors: [{field: 'scenario', message: 'Pick an activity'}]};\n  var quiz = buildQuiz(params.city, params.scenario);\n  if (quiz.error) return quiz;\n  if (!params.answer) {\n    return { type: 'quiz', city: quiz.city, country: quiz.country, weather: quiz.weather, scenario: params.scenario, question: quiz.question, options: quiz.options, instructions: 'Call again with answer=A/B/C/D and _submit=true to check your answer' };\n  }\n  var correct = quiz.correct_answer === params.answer.toUpperCase();\n  return { type: 'result', city: quiz.city, country: quiz.country, weather: quiz.weather, scenario: params.scenario, your_answer: params.answer.toUpperCase(), correct_answer: quiz.correct_answer, is_correct: correct, explanation: quiz.explanation };\n}\n\nfunction buildQuiz(city, scenario) {\n  var geo = http.get('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(city) + '\u0026count=1');\n  if (!geo.json || !geo.json.results || geo.json.results.length === 0) return {error: 'City not found: ' + city};\n  var loc = geo.json.results[0];\n  var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.latitude + '\u0026longitude=' + loc.longitude + '\u0026current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,apparent_temperature\u0026timezone=auto';\n  var wx = http.get(url);\n  if (!wx.json || !wx.json.current) return {error: 'Failed to fetch weather'};\n  var cur = wx.json.current;\n  var codes = {0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',48:'Rime fog',51:'Light drizzle',53:'Moderate drizzle',55:'Dense drizzle',61:'Slight rain',63:'Moderate rain',65:'Heavy rain',71:'Slight snow',73:'Moderate snow',75:'Heavy snow',80:'Slight showers',81:'Moderate showers',82:'Violent showers',95:'Thunderstorm',96:'Thunderstorm with hail',99:'Thunderstorm with heavy hail'};\n  var temp = cur.temperature_2m; var feels = cur.apparent_temperature; var wind = cur.wind_speed_10m; var humid = cur.relative_humidity_2m; var code = cur.weather_code;\n  var cond = codes[code] || 'Unknown';\n  var isRain = code \u003e= 51 \u0026\u0026 code \u003c= 82; var isSnow = code \u003e= 71 \u0026\u0026 code \u003c= 75; var isStorm = code \u003e= 95; var isClear = code \u003c= 2;\n  var weather = {temperature_c: temp, feels_like_c: feels, conditions: cond, wind_kmh: wind, humidity_pct: humid};\n  var ws = temp + '\\u00b0C (feels ' + feels + '\\u00b0C), ' + cond + ', wind ' + wind + ' km/h';\n  var q, opts, ans, why;\n  if (scenario === 'beach') {\n    q = 'It is ' + ws + ' in ' + loc.name + '. You want a beach day. What should you do?';\n    if (isStorm) { opts={A:'Head to the beach',B:'Wait at the hotel',C:'Go to an indoor pool instead',D:'Drive to another beach'}; ans='C'; why='Thunderstorms at the beach are dangerous (lightning, rough seas). Go indoors.'; }\n    else if (isRain) { opts={A:'Go with an umbrella',B:'Wear a rain jacket and swim',C:'Switch to an indoor activity',D:'Wait 30 minutes'}; ans='C'; why='Rain makes the beach unpleasant and unsafe. Switch to indoor plans.'; }\n    else if (temp \u003c 15) { opts={A:'Swim anyway',B:'Bring a wetsuit',C:'Skip the beach, coastal walk instead',D:'Stay in bed'}; ans='C'; why='At ' + temp + '\\u00b0C the water is too cold for most people. A coastal walk is better.'; }\n    else if (temp \u003c 24) { opts={A:'Perfect beach weather',B:'Go but bring a jacket for later',C:'Too cold for the beach',D:'Only go if windless'}; ans='B'; why='At ' + temp + '\\u00b0C it could cool off later. Bring a jacket.'; }\n    else { opts={A:'Head out with sunscreen',B:'Too hot, stay inside',C:'Only go in the evening',D:'Sunscreen is optional'}; ans='A'; why='At ' + temp + '\\u00b0C it is ideal beach weather. Sunscreen is essential!'; }\n  } else if (scenario === 'hiking') {\n    q = 'It is ' + ws + ' in ' + loc.name + '. You planned a mountain hike. Best decision?';\n    if (isStorm) { opts={A:'Hike anyway',B:'Cancel and reschedule',C:'Do a short trail instead',D:'Wait at the trailhead'}; ans='B'; why='Lightning on exposed trails is extremely dangerous. Cancel.'; }\n    else if (isRain) { opts={A:'Hike in the rain',B:'Stick to low sheltered trails',C:'Cancel entirely',D:'Run the trail quickly'}; ans='B'; why='Rain makes trails slippery. Stick to lower, sheltered paths.'; }\n    else if (temp \u003e 35) { opts={A:'Start at dawn, finish before noon',B:'Hike at midday',C:'Temperature doesn\\'t matter',D:'Go in the afternoon'}; ans='A'; why='At ' + temp + '\\u00b0C heat exhaustion is a real risk. Start early.'; }\n    else { opts={A:'Great conditions, enjoy the hike',B:'Too risky in any weather',C:'Only go with a guide',D:'Wait for better conditions'}; ans='A'; why=temp + '\\u00b0C with ' + cond.toLowerCase() + ' is solid hiking weather.'; }\n  } else if (scenario === 'picnic') {\n    q = 'It is ' + ws + ' in ' + loc.name + '. You want a park picnic. What should you do?';\n    if (isStorm || isRain) { opts={A:'Picnic under a tree',B:'Move indoors to a cafe',C:'Use a tarp and power through',D:'Eat in the car'}; ans='B'; why='Rain ruins food and trees attract lightning. Move indoors.'; }\n    else if (temp \u003c 8) { opts={A:'Bundle up in the cold',B:'Bring hot soup and blankets',C:'Too cold, reschedule',D:'Sit on a sunny bench'}; ans='B'; why='At ' + temp + '\\u00b0C you can picnic with hot drinks and warm blankets.'; }\n    else if (temp \u003e 32) { opts={A:'Find shade and bring cold drinks',B:'Sit in direct sun',C:'Cancel, food will spoil',D:'Eat quickly'}; ans='A'; why='At ' + temp + '\\u00b0C shade is essential. Keep food and drinks cool.'; }\n    else { opts={A:'Perfect picnic weather, enjoy!',B:'Too windy for a picnic',C:'Only picnic after 5pm',D:'Picnics are only for summer'}; ans='A'; why=temp + '\\u00b0C with ' + cond.toLowerCase() + ' is lovely picnic weather!'; }\n  } else if (scenario === 'cycling') {\n    q = 'It is ' + ws + ' in ' + loc.name + '. You want a long bike ride. Smartest move?';\n    if (isStorm) { opts={A:'Ride fast to beat the storm',B:'Use an indoor trainer',C:'Wear bright colors and go',D:'Wait 10 minutes'}; ans='B'; why='Cycling in a thunderstorm is extremely dangerous. Ride indoors.'; }\n    else if (isRain) { opts={A:'Ride slowly, avoid painted road markings',B:'Rain doesn\\'t affect cycling',C:'Cancel, bikes don\\'t work in rain',D:'Only ride trails'}; ans='A'; why='You can ride in rain but road markings and metal get slippery. Slow down.'; }\n    else if (wind \u003e 30) { opts={A:'Ride into wind first, tailwind home',B:'Wind doesn\\'t matter',C:'Only ride downhill',D:'Wait for calm'}; ans='A'; why='Ride into the wind while fresh, enjoy the tailwind on the way back.'; }\n    else { opts={A:'Great conditions, get riding',B:'Too dangerous without a helmet',C:'Only before sunrise',D:'Only safe on trails'}; ans='A'; why=temp + '\\u00b0C with ' + cond.toLowerCase() + ' is excellent cycling weather.'; }\n  } else {\n    q = 'It is ' + ws + ' in ' + loc.name + '. You want to go for a run. What should you consider?';\n    if (isStorm) { opts={A:'Treadmill instead',B:'Storm running builds toughness',C:'Rubber shoes prevent lightning',D:'Run between raindrops'}; ans='A'; why='Lightning doesn\\'t care how fast you are. Use a treadmill.'; }\n    else if (temp \u003e 32) { opts={A:'Run early morning or late evening',B:'Midday for vitamin D',C:'Coffee before hot runs',D:'Dark clothing absorbs sweat'}; ans='A'; why='At ' + temp + '\\u00b0C run during cooler hours to avoid heat stroke.'; }\n    else if (temp \u003c 0) { opts={A:'Layers and cover exposed skin',B:'Run faster to stay warm',C:'Cold air is good for lungs',D:'Shorts if fast enough'}; ans='A'; why='At ' + temp + '\\u00b0C exposed skin risks frostbite. Layer up.'; }\n    else { opts={A:'Lace up and enjoy!',B:'Too cold for running',C:'Only run indoors',D:'Wait for warmer weather'}; ans='A'; why=temp + '\\u00b0C with ' + cond.toLowerCase() + ' is great running weather!'; }\n  }\n  return {city: loc.name, country: loc.country, weather: weather, question: q, options: opts, correct_answer: ans, explanation: why};\n}"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "weather_report",
+        "description": "Generate a weather report for a city",
+        "arguments": [
+          {
+            "name": "city",
+            "description": "City to report on",
+            "required": true
+          }
+        ],
+        "body": "Use the get_weather tool to fetch the current weather for {{city}}, then write a brief weather report including:\n- Current conditions and temperature\n- Whether it is good weather for outdoor activities\n- What to wear based on the conditions\n- Any weather warnings if applicable"
+      }
+    ],
+    "installCount": 0,
+    "activeInstalls": 0,
+    "avgRating": 0,
+    "reviewCount": 0,
+    "createdAt": "2026-04-15T22:33:18.336430382Z",
+    "updatedAt": "2026-04-15T22:53:22.292866015Z",
+    "publishedAt": "2026-04-15T22:33:49.868963494Z"
+  },
+  {
+    "id": "app-bf28f1489c03237c",
+    "name": "rubix",
+    "displayName": "rubix",
+    "description": "Rubix Building Automation — query nodes, build flows, analyze history, create dashboards",
+    "longDescription": "",
+    "version": "1.0.0",
+    "icon": "",
+    "color": "",
+    "category": "utilities",
+    "tags": [
+      "rubix",
+      "building-automation",
+      "iot"
+    ],
+    "authorId": "system",
+    "authorName": "NubeIO",
+    "workspaceId": "",
+    "visibility": "public",
+    "permissions": {
+      "allowedHosts": [
+        "*.nubedge.com",
+        "localhost:*"
+      ],
+      "defaultToolClass": "read-write",
+      "secrets": null
+    },
+    "settings": [
+      {
+        "key": "rubix_host",
+        "label": "Rubix Host URL",
+        "type": "url",
+        "required": true,
+        "default": "http://localhost:9000"
+      },
+      {
+        "key": "rubix_token",
+        "label": "API Token (JWT)",
+        "type": "secret",
+        "required": false,
+        "default": ""
+      }
+    ],
+    "tools": [],
+    "prompts": [
+      {
+        "name": "build_dashboard",
+        "description": "Create dashboard pages with widgets, templates, and data queries for the Rubix scene builder",
+        "arguments": [
+          {
+            "name": "description",
+            "description": "What dashboard to build (e.g. 'AHU overview with temperature and status', 'site energy dashboard')",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user build a dashboard in Rubix.\n\nThe user wants: {{description}}\n\n## Dashboard Architecture\n\n```\nui.page\n  ui.tab (optional, for multi-tab pages)\n    ui.template (layout container)\n      ui.widget (individual components — charts, gauges, stats)\n```\n\n## Step 1: Create a Page\n\nCall `rubix.pages_create`:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"requestBody\": {\n    \"type\": \"ui.page\",\n    \"name\": \"AHU Overview\",\n    \"settings\": {\n      \"route\": \"/buildings/{buildingId}/ahu\",\n      \"title\": \"AHU Overview - {buildingName}\"\n    }\n  }\n}\n```\n\n## Step 2: Create Widgets\n\nCall `rubix.widgets_create`:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"requestBody\": {\n    \"type\": \"ui.widget\",\n    \"name\": \"Temperature\",\n    \"data\": {\n      \"widgetType\": \"stat\",\n      \"query\": \"equipRef is {{context.equipId}} and i has \\\"temp\\\" and i has \\\"point\\\"\",\n      \"aggregation\": \"last\",\n      \"unit\": \"degC\"\n    }\n  }\n}\n```\n\n**Common widget types:**\n- `stat` — single value display\n- `chart` — time-series line/bar chart\n- `gauge` — circular gauge\n- `timeline` — event timeline\n- `alerts-table` — alarm list\n- `button` — action trigger\n- `input` — value input\n- `schedule` — schedule viewer\n- `site-detail` — site info card\n\n## Step 3: Attach Page to a Node\n\nCall `rubix.nodes_pages_attach` to link the page to an equipment or site node so it appears in navigation.\n\n## Context Variables\n\nWidgets support context-driven queries using template variables:\n- `{{context.nodeId}}` — current node from navigation\n- `{{context.siteId}}` — site context\n- `{{context.equipId}}` — equipment context\n- `{{route.org}}` — org from URL\n- `{{route.device}}` ��� device from URL\n- `{{r.equipRef}}` — ref from scene builder connections\n\n## Step 4: Resolve and Test\n\nCall `rubix.pages_resolve` to test that the page renders with data:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"pageId\": \"\u003cpageId\u003e\",\n  \"context\": {\"equipId\": \"ahu-1\"}\n}\n```\n\n## Steps\n\n1. Ask the user what data they want to display\n2. Query existing nodes to understand what's available\n3. Create the page, template, and widgets\n4. Attach the page to the appropriate node\n5. Test with `pages_resolve`"
+      },
+      {
+        "name": "create_flow",
+        "description": "Create nodes and connect them with edges to build automation flows",
+        "arguments": [
+          {
+            "name": "description",
+            "description": "Describe the flow you want to build",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user create an automation flow in Rubix.\n\nThe user wants: {{description}}\n\n## How to Create Nodes\n\nCall `rubix.nodes_create` with:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"requestBody\": {\n    \"type\": \"core.counter\",\n    \"name\": \"My Counter\",\n    \"position\": {\"x\": 100, \"y\": 200},\n    \"settings\": {},\n    \"refs\": [\n      {\"refName\": \"parentRef\", \"toNodeId\": \"\u003cdeviceId\u003e\"}\n    ]\n  }\n}\n```\n\n**IMPORTANT:** Every node needs a `parentRef`. Use the deviceId if placing at the top level.\n\n## How to Connect Nodes (Edges)\n\nCall `rubix.edges_create` with:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"requestBody\": {\n    \"sourceNode\": \"\u003cnodeId\u003e\",\n    \"sourcePort\": \"out\",\n    \"targetNode\": \"\u003cotherNodeId\u003e\",\n    \"targetPort\": \"in\"\n  }\n}\n```\n\n## Bulk Create (Preferred for Multiple Nodes)\n\nCall `rubix.nodes_bulk-create` to create multiple nodes and edges in one request:\n```json\n{\n  \"requestBody\": {\n    \"nodes\": [\n      {\"type\": \"core.trigger\", \"name\": \"Start\", \"position\": {\"x\": 100, \"y\": 100}},\n      {\"type\": \"core.counter\", \"name\": \"Counter\", \"position\": {\"x\": 300, \"y\": 100}}\n    ],\n    \"edges\": [\n      {\"sourceNode\": \"$0\", \"sourcePort\": \"out\", \"targetNode\": \"$1\", \"targetPort\": \"in\"}\n    ]\n  }\n}\n```\n\n## Steps\n\n1. First call `rubix.pallet_list` to check available node types\n2. Ask the user to confirm which node types to use if ambiguous\n3. Create the nodes (bulk if multiple)\n4. Connect them with edges\n5. Verify by calling `rubix.runtime_status` or querying the created nodes\n\n## Common Node Types\n\n- `core.trigger` — manual trigger button\n- `core.counter` — counts input triggers\n- `core.math` — math operations\n- `core.compare` — value comparison\n- `core.switch` — conditional routing\n- `core.delay` — time delay\n- `flow.function` — custom logic\n- `ui.container` — organizational folder"
+      },
+      {
+        "name": "getting_started",
+        "description": "Get started with Rubix — login, discover the system, understand the node hierarchy",
+        "body": "You are helping the user get started with the Rubix Building Automation platform.\n\n## Step 1: Login\n\nCall `rubix.auth_login` with:\n```json\n{\"requestBody\": {\"email\": \"admin@rubix.io\", \"password\": \"admin@rubix.io\"}}\n```\n\nExtract from the response:\n- `token` — JWT for authenticated requests\n- `orgId` — organization ID (usually \"test\" in dev)\n- `deviceId` — root device ID (e.g. \"dev_01A12A00AB0C\")\n\nTell the user their orgId and deviceId.\n\n## Step 2: Runtime Status\n\nCall `rubix.runtime_status` with the orgId and deviceId to check the system is running.\n\n## Step 3: Explore the Hierarchy\n\nCall `rubix.nodes_list` with orgId, deviceId, and limit=10 to show what exists.\n\nThe Rubix node hierarchy is:\n```\nauth.org (root)\n  rubix.device\n    rubix.drivers\n      ui.container (Hardware Drivers)\n      ui.container (Protocol Drivers)\n    rubix.services\n      rubix.schedule-manager\n      rubix.jobs\n      alarms.alarm-service\n```\n\n## Step 4: Available Node Types\n\nCall `rubix.pallet_list` to show what node types can be created.\n\nPresent a summary to the user showing: system status, node count, and the key infrastructure nodes."
+      },
+      {
+        "name": "history_analysis",
+        "description": "Query and analyze historical time-series data from Rubix nodes",
+        "arguments": [
+          {
+            "name": "question",
+            "description": "What history data to analyze (e.g. 'temperature last 24 hours', 'energy consumption this week')",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user analyze historical data from Rubix.\n\nThe user wants: {{question}}\n\n## How to Query History\n\nCall `rubix.query_history` with:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"filter\": \"i has \\\"temp\\\" and i has \\\"sensor\\\"\",\n  \"dateFrom\": \"2026-04-15T00:00:00Z\",\n  \"dateTo\": \"2026-04-16T00:00:00Z\",\n  \"limit\": 50\n}\n```\n\n## Date Range Shortcuts\n\nUse ISO 8601 timestamps. Common patterns:\n- Last hour: `dateFrom` = 1 hour ago\n- Last 24h: `dateFrom` = yesterday same time\n- Last 7 days: `dateFrom` = 7 days ago\n- Last 30 days: `dateFrom` = 30 days ago\n\n## Aggregation\n\nAdd aggregation params for summarized data:\n```json\n{\n  \"aggregateInterval\": \"1h\",\n  \"aggregateFunction\": \"avg\"\n}\n```\n\n**Interval formats:** `10s`, `5m`, `15m`, `1h`, `6h`, `1d` or keywords: `hourly`, `daily`, `weekly`, `monthly`\n\n**Functions:** `avg`, `min`, `max`, `sum`, `count`, `last`, `difference`\n\nUse `difference` for energy/counter delta analysis (consumption between intervals).\n\n## Multi-Port Queries\n\nUse pipe select to get multiple ports:\n```\ni has \"ahu\" and i has \"point\" | select temperature, humidity, pressure\n```\n\n## Auto-Downsampling\n\nThe system auto-downsamples to ~360 points:\n- 1 hour range: 10s resolution\n- 24 hours: 5m resolution\n- 7 days: 1h resolution\n- 30 days: 6h resolution\n- \u003e30 days: 1d resolution\n\n## Steps\n\n1. First check what history-enabled nodes exist using `rubix.histories_list-enabled-nodes`\n2. Build the appropriate filter and date range\n3. Call `rubix.query_history`\n4. Present results as a summary with key statistics (min, max, avg, trends)\n5. Highlight any anomalies or notable patterns\n\n## Checking History Config\n\nTo see if a node has history enabled:\n- `rubix.histories_get-node-ports` — shows all ports and their history settings\n- `rubix.histories_update-port-config` — enable/disable history on a port"
+      },
+      {
+        "name": "navigation",
+        "description": "Build site navigation hierarchy — sites, buildings, floors with containers and nav links",
+        "arguments": [
+          {
+            "name": "structure",
+            "description": "Describe the navigation structure (e.g. 'Sydney office with 3 floors', 'multi-site with 2 buildings each')",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user build a navigation hierarchy in Rubix.\n\nThe user wants: {{structure}}\n\n## Navigation Architecture\n\nRubix navigation is built from `ui.container` nodes arranged in a hierarchy:\n\n```\nui.container (Site: \"Sydney Office\")    [identity: site]\n  ui.container (Building: \"Tower A\")   [identity: building]\n    ui.container (Floor: \"Level 1\")    [identity: floor]\n    ui.container (Floor: \"Level 2\")    [identity: floor]\n  ui.container (Building: \"Tower B\")   [identity: building]\n```\n\n## Step 1: Create Site Container\n\nCall `rubix.nodes_create`:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"requestBody\": {\n    \"type\": \"ui.container\",\n    \"name\": \"Sydney Office\",\n    \"settings\": {\n      \"containerType\": \"site\",\n      \"geoCity\": \"Sydney\",\n      \"geoCountry\": \"Australia\"\n    },\n    \"refs\": [\n      {\"refName\": \"parentRef\", \"toNodeId\": \"\u003cdeviceId\u003e\"}\n    ]\n  }\n}\n```\n\nThen add identity tags: call `rubix.identity_create` with tag `site`.\n\n## Step 2: Create Building Containers\n\nCreate child containers with `parentRef` pointing to the site:\n```json\n{\n  \"requestBody\": {\n    \"type\": \"ui.container\",\n    \"name\": \"Tower A\",\n    \"settings\": {\"containerType\": \"building\"},\n    \"refs\": [\n      {\"refName\": \"parentRef\", \"toNodeId\": \"\u003csiteNodeId\u003e\"},\n      {\"refName\": \"siteRef\", \"toNodeId\": \"\u003csiteNodeId\u003e\"}\n    ]\n  }\n}\n```\n\nAdd identity tag: `building`.\n\n## Step 3: Create Floor Containers\n\nSame pattern with `parentRef` to the building and `siteRef` to the site.\n\n## Step 4: Attach Dashboard Pages\n\nFor each container, create a `ui.page` and attach it so clicking the building/floor opens its dashboard.\n\n## Step 5: Verify Navigation\n\nCall `rubix.nav_sidebar` to see the navigation tree:\n```json\n{\"orgId\": \"\u003corgId\u003e\", \"deviceId\": \"\u003cdeviceId\u003e\"}\n```\n\n## Steps\n\n1. Parse the user's desired structure\n2. Create containers top-down (site -\u003e building -\u003e floor)\n3. Add identity tags at each level\n4. Set up refs (parentRef, siteRef, levelRef)\n5. Attach pages to each level\n6. Verify with `nav_sidebar`"
+      },
+      {
+        "name": "query_nodes",
+        "description": "Query nodes using the Rubix Haystack filter language",
+        "arguments": [
+          {
+            "name": "filter",
+            "description": "What to search for (e.g. 'all sensors', 'temperature points', 'active alarms')",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user query nodes in Rubix using the Haystack filter language.\n\nThe user wants to find: {{filter}}\n\n## How to Query\n\nCall `rubix.query_filter` with orgId, deviceId, and a `filter` string using Haystack syntax.\n\n## Haystack Filter Syntax\n\n**By type:**\n- `type is \"core.trigger\"` — exact type match\n- `type in [\"core.trigger\", \"core.counter\"]` — multiple types\n\n**By name:**\n- `name contains \"Supply\"` — substring match\n- `name like \"valve%\"` — wildcard\n\n**By identity tags (fast):**\n- `i has \"sensor\"` — has tag\n- `i has [\"temp\", \"humid\"]` — has any of these tags\n- `i hasAll [\"temp\", \"sensor\", \"point\"]` — has all tags\n\n**By refs:**\n- `siteRef is \"node_001\"` — at a specific site\n- `equipRef is \"ahu_01\"` — belongs to equipment\n- `parentRef is \"dev_123\"` — direct children\n\n**By port values:**\n- `out.valueNum \u003e 20` — output value above 20\n- `state.value is \"active\"` — string port value\n\n**By alarm state:**\n- `i has \"alarm\" and state.value is \"active\"` — active alarms\n- `severity.value is \"Critical\"` — critical alarms\n\n**By settings (JSONB):**\n- `settings.productCode contains \"widget\"` — settings field search\n\n**Combining:**\n- `type is \"sensor\" and name contains \"Temp\"` — AND\n- `i has \"temp\" or i has \"humid\"` — OR\n- `not (status is \"inactive\")` — NOT\n- `(i has \"temp\" or i has \"humid\") and siteRef is \"site_1\"` — grouping\n\n**Modifiers (pipe):**\n- `type is \"device\" | limit 50` — limit results\n- `type is \"device\" | sort name asc` — sort\n- `type is \"device\" | offset 10 | limit 10` — pagination\n- `type is \"trigger\" | select out, in1` — port projection\n\n## Instructions\n\n1. Translate the user's natural language request into a Haystack filter\n2. Call `rubix.query_filter` with the filter\n3. Present the results in a clear table or list\n4. If no results, suggest alternative filters"
+      },
+      {
+        "name": "tagging",
+        "description": "Manage tags and identity markers on Rubix nodes for classification and fast querying",
+        "arguments": [
+          {
+            "name": "task",
+            "description": "What to tag or how to organize (e.g. 'tag sensors on floor 2', 'add HVAC identity to AHU nodes')",
+            "required": true
+          }
+        ],
+        "body": "You are helping the user manage tags on Rubix nodes.\n\nThe user wants: {{task}}\n\n## Two Tag Systems\n\n### 1. Identity Tags (Recommended for Filtering)\n\nIdentity tags are marker tags optimized for fast queries (5-10x faster than regular tags). Use these for classification like `sensor`, `temp`, `equip`, `point`, `hvac`.\n\n**Add identity tag:**\nCall `rubix.identity_create`:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"nodeId\": \"\u003cnodeId\u003e\",\n  \"requestBody\": {\"tag\": \"sensor\"}\n}\n```\n\n**List identity tags on a node:**\nCall `rubix.identity_list` with orgId, deviceId, nodeId.\n\n**Remove identity tag:**\nCall `rubix.identity_delete` with orgId, deviceId, nodeId, and the tag name.\n\n**Query by identity (Haystack):**\n- `i has \"sensor\"` — nodes with this tag\n- `i has [\"temp\", \"humid\"]` — any of these\n- `i hasAll [\"temp\", \"sensor\", \"point\"]` — all of these\n- `i exists` — nodes with any identity tag\n- `i isEmpty` — nodes without identity tags\n\n### 2. Regular Tags (Key-Value Metadata)\n\nRegular tags support key-value pairs. Use for metadata like `unit: \"degC\"`, `floor: \"2\"`.\n\n**Add tag:**\nCall `rubix.tags_create`:\n```json\n{\n  \"orgId\": \"\u003corgId\u003e\",\n  \"deviceId\": \"\u003cdeviceId\u003e\",\n  \"nodeId\": \"\u003cnodeId\u003e\",\n  \"requestBody\": {\"tagName\": \"unit\", \"tagValue\": \"degC\"}\n}\n```\n\n## Common Tag Patterns (Haystack Convention)\n\n**Classification markers (identity):** `site`, `building`, `floor`, `equip`, `point`, `sensor`, `actuator`, `command`\n\n**Measurement types:** `temp`, `humidity`, `pressure`, `flow`, `energy`, `power`, `co2`\n\n**Equipment types:** `ahu`, `vav`, `chiller`, `boiler`, `pump`, `fan`\n\n## Steps\n\n1. First query the target nodes using `rubix.query_filter`\n2. Confirm with the user which nodes to tag\n3. Apply tags (identity for classification, regular for key-value metadata)\n4. Verify by querying with the new tags"
+      }
+    ],
+    "installCount": 0,
+    "activeInstalls": 0,
+    "avgRating": 0,
+    "reviewCount": 0,
+    "createdAt": "2026-04-16T01:12:00.469027972Z",
+    "updatedAt": "2026-04-16T01:12:00.469027972Z",
+    "publishedAt": "2026-04-16T01:12:00.469027972Z"
+  }
+]

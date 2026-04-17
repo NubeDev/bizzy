@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"gorm.io/gorm"
 )
 
 // ToolCaller executes a named tool with params and returns the result.
@@ -22,11 +22,11 @@ type PromptRunner interface {
 }
 
 // Runner executes workflow runs. It manages active runs in memory and persists
-// state to a jsondb collection.
+// state to the database.
 type Runner struct {
 	mu         sync.RWMutex
 	active     map[string]*activeRun // workflow_id -> active run state
-	store      *jsondb.Collection[models.WorkflowRun]
+	db         *gorm.DB
 	workflows  *Store
 	tools      ToolCaller
 	prompts    PromptRunner
@@ -46,14 +46,14 @@ type approvalAction struct {
 
 // NewRunner creates a workflow runner.
 func NewRunner(
-	store *jsondb.Collection[models.WorkflowRun],
+	db *gorm.DB,
 	workflows *Store,
 	tools ToolCaller,
 	prompts PromptRunner,
 ) *Runner {
 	return &Runner{
 		active:    make(map[string]*activeRun),
-		store:     store,
+		db:        db,
 		workflows: workflows,
 		tools:     tools,
 		prompts:   prompts,
@@ -64,7 +64,8 @@ func NewRunner(
 // an idempotency key — if a run with that ID already exists, it is returned.
 func (r *Runner) Start(run models.WorkflowRun) (*models.WorkflowRun, error) {
 	// Idempotency check.
-	if existing, ok := r.store.Get(run.ID); ok {
+	var existing models.WorkflowRun
+	if err := r.db.First(&existing, "id = ?", run.ID).Error; err == nil {
 		return &existing, nil
 	}
 
@@ -107,7 +108,7 @@ func (r *Runner) Start(run models.WorkflowRun) (*models.WorkflowRun, error) {
 		}
 	}
 
-	if err := r.store.Create(run); err != nil {
+	if err := r.db.Create(&run).Error; err != nil {
 		return nil, fmt.Errorf("persist workflow run: %w", err)
 	}
 
@@ -128,8 +129,8 @@ func (r *Runner) Start(run models.WorkflowRun) (*models.WorkflowRun, error) {
 
 // Get returns the current state of a workflow run.
 func (r *Runner) Get(id string) (*models.WorkflowRun, bool) {
-	run, ok := r.store.Get(id)
-	if !ok {
+	var run models.WorkflowRun
+	if err := r.db.First(&run, "id = ?", id).Error; err != nil {
 		return nil, false
 	}
 	return &run, true
@@ -137,18 +138,19 @@ func (r *Runner) Get(id string) (*models.WorkflowRun, bool) {
 
 // List returns workflow runs, optionally filtered.
 func (r *Runner) List(userID, appName string, status models.WorkflowStatus) []models.WorkflowRun {
-	return r.store.FindFunc(func(run models.WorkflowRun) bool {
-		if userID != "" && run.UserID != userID {
-			return false
-		}
-		if appName != "" && run.AppName != appName {
-			return false
-		}
-		if status != "" && run.Status != status {
-			return false
-		}
-		return true
-	})
+	query := r.db.Model(&models.WorkflowRun{})
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if appName != "" {
+		query = query.Where("app_name = ?", appName)
+	}
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var runs []models.WorkflowRun
+	query.Order("created_at DESC").Find(&runs)
+	return runs
 }
 
 // Approve sends an approval or rejection to a waiting workflow.
@@ -160,8 +162,8 @@ func (r *Runner) Approve(id string, action, feedback string) error {
 		return fmt.Errorf("workflow %s is not active", id)
 	}
 
-	run, ok := r.store.Get(id)
-	if !ok {
+	var run models.WorkflowRun
+	if err := r.db.First(&run, "id = ?", id).Error; err != nil {
 		return fmt.Errorf("workflow %s not found", id)
 	}
 	if run.Status != models.WorkflowWaitingApproval {
@@ -187,12 +189,13 @@ func (r *Runner) Cancel(id string) error {
 
 	ar.cancel()
 
-	run, _ := r.store.Get(id)
+	var run models.WorkflowRun
+	r.db.First(&run, "id = ?", id)
 	now := time.Now().UTC()
 	run.Status = models.WorkflowCancelled
 	run.Version++
 	run.FinishedAt = &now
-	r.store.Update(run)
+	r.db.Save(&run)
 
 	r.mu.Lock()
 	delete(r.active, id)
@@ -209,7 +212,8 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 		r.mu.Unlock()
 	}()
 
-	run, _ := r.store.Get(runID)
+	var run models.WorkflowRun
+	r.db.First(&run, "id = ?", runID)
 
 	// Build the template variable map: starts with inputs.
 	vars := map[string]any{
@@ -227,7 +231,7 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 		run.Stages[i].Status = models.StageRunning
 		run.Stages[i].StartedAt = &now
 		run.Version++
-		r.store.Update(run)
+		r.db.Save(&run)
 
 		result, err := r.executeStage(ctx, &run, &stageDef, vars, ar)
 
@@ -245,7 +249,7 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 				run.Stages[i].Status = models.StageSkipped
 				run.Stages[i].Error = err.Error()
 				run.Version++
-				r.store.Update(run)
+				r.db.Save(&run)
 				continue
 
 			case "retry":
@@ -285,7 +289,7 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 		// Also set {{previous}} to last completed output.
 		vars["previous"] = result
 
-		r.store.Update(run)
+		r.db.Save(&run)
 	}
 
 	// All stages complete.
@@ -293,7 +297,7 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 	run.Status = models.WorkflowCompleted
 	run.Version++
 	run.FinishedAt = &now
-	r.store.Update(run)
+	r.db.Save(&run)
 }
 
 // executeStage runs a single stage and returns its output.
@@ -358,7 +362,7 @@ func (r *Runner) executeApproval(
 	run.Stages[stageIdx].Status = models.StageWaiting
 	run.Stages[stageIdx].Output = content
 	run.Version++
-	r.store.Update(*run)
+	r.db.Save(run)
 
 	// Wait for approval.
 	select {
@@ -429,5 +433,5 @@ func (r *Runner) failRun(run *models.WorkflowRun, stageIdx int, err error) {
 	run.Error = err.Error()
 	run.Version++
 	run.FinishedAt = &now
-	r.store.Update(*run)
+	r.db.Save(run)
 }

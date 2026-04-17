@@ -41,11 +41,10 @@ func (a *API) installApp(c *gin.Context) {
 	}
 
 	// Check if already installed.
-	existing := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == user.ID && ai.AppName == appName
-	})
-	if len(existing) > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "app already installed", "installId": existing[0].ID})
+	var existing models.AppInstall
+	result := a.DB.Where("user_id = ? AND app_name = ?", user.ID, appName).First(&existing)
+	if result.Error == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "app already installed", "installId": existing.ID})
 		return
 	}
 
@@ -89,7 +88,7 @@ func (a *API) installApp(c *gin.Context) {
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 	}
-	if err := a.AppInstalls.Create(install); err != nil {
+	if err := a.DB.Create(&install).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -99,9 +98,8 @@ func (a *API) installApp(c *gin.Context) {
 // listInstalls returns the current user's installed apps.
 func (a *API) listInstalls(c *gin.Context) {
 	user := auth.GetUser(c)
-	installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-		return ai.UserID == user.ID
-	})
+	var installs []models.AppInstall
+	a.DB.Where("user_id = ?", user.ID).Find(&installs)
 	// Check for stale versions.
 	for i, inst := range installs {
 		app, ok := a.AppRegistry.Get(inst.AppName)
@@ -115,8 +113,8 @@ func (a *API) listInstalls(c *gin.Context) {
 // updateInstall enables/disables or updates settings for an install.
 func (a *API) updateInstall(c *gin.Context) {
 	user := auth.GetUser(c)
-	install, ok := a.AppInstalls.Get(c.Param("id"))
-	if !ok || install.UserID != user.ID {
+	var install models.AppInstall
+	if err := a.DB.First(&install, "id = ? AND user_id = ?", c.Param("id"), user.ID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "install not found"})
 		return
 	}
@@ -154,7 +152,7 @@ func (a *API) updateInstall(c *gin.Context) {
 	}
 	install.UpdatedAt = time.Now().UTC()
 
-	if err := a.AppInstalls.Update(install); err != nil {
+	if err := a.DB.Save(&install).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -164,12 +162,12 @@ func (a *API) updateInstall(c *gin.Context) {
 // uninstallApp removes an app install.
 func (a *API) uninstallApp(c *gin.Context) {
 	user := auth.GetUser(c)
-	install, ok := a.AppInstalls.Get(c.Param("id"))
-	if !ok || install.UserID != user.ID {
+	var install models.AppInstall
+	if err := a.DB.First(&install, "id = ? AND user_id = ?", c.Param("id"), user.ID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "install not found"})
 		return
 	}
-	if err := a.AppInstalls.Delete(install.ID); err != nil {
+	if err := a.DB.Delete(&install).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

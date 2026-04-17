@@ -5,32 +5,23 @@ import (
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/auth"
-	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // API holds the shared state for all API handlers.
 type API struct {
-	Workspaces  *jsondb.Collection[models.Workspace]
-	Users       *jsondb.Collection[models.User]
-	AppInstalls *jsondb.Collection[models.AppInstall]
-	Sessions    *jsondb.Collection[models.Session]
+	DB          *gorm.DB
 	AppRegistry *apps.Registry
 	MCPFactory  *apps.MCPFactory
 	Runners        *airunner.Registry                          // AI providers (claude, ollama, openai, etc.)
 	Jobs           *airunner.JobStore                          // In-memory async job store
-	ProviderConfig *jsondb.ConfigFile[models.ProviderConfig]   // Global provider settings (admin)
 
 	Memory         *memory.Store                                  // Server + per-user memory
-
-	// Store collections.
-	StoreApps  *jsondb.Collection[models.StoreApp]
-	AppShares  *jsondb.Collection[models.AppShare]
-	AppReviews *jsondb.Collection[models.AppReview]
 
 	// Workflow engine.
 	Workflows     *workflow.Runner
@@ -39,6 +30,19 @@ type API struct {
 	// Reusable application services (decoupled from HTTP).
 	AgentSvc *services.AgentService
 	ToolSvc  *services.ToolService
+}
+
+// ProviderConfigGet loads the provider config from the database.
+func (a *API) ProviderConfigGet() models.ProviderConfig {
+	var cfg models.ProviderConfig
+	a.DB.First(&cfg, "id = ?", "default")
+	return cfg
+}
+
+// ProviderConfigSet saves the provider config to the database.
+func (a *API) ProviderConfigSet(cfg models.ProviderConfig) error {
+	cfg.ID = "default"
+	return a.DB.Save(&cfg).Error
 }
 
 // SetupRouter creates a gin router with all routes mounted.
@@ -50,9 +54,11 @@ func (a *API) SetupRouter() *gin.Engine {
 
 	// Health check (no auth).
 	r.GET("/health", func(c *gin.Context) {
+		var userCount int64
+		a.DB.Model(&models.User{}).Count(&userCount)
 		c.JSON(200, gin.H{
 			"status": "ok",
-			"users":  a.Users.Count(),
+			"users":  userCount,
 			"apps":   len(a.AppRegistry.List()),
 		})
 	})
@@ -62,7 +68,7 @@ func (a *API) SetupRouter() *gin.Engine {
 	r.POST("/bootstrap", a.bootstrap)
 
 	// All other routes require auth.
-	authed := r.Group("/", auth.Middleware(a.Users))
+	authed := r.Group("/", auth.Middleware(a.DB))
 
 	// User self-service.
 	authed.GET("/users/me", a.getMe)

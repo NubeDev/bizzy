@@ -1,0 +1,153 @@
+[
+  {
+    "id": "inst-5b7a73cb2856493b",
+    "appName": "rubix-developer",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {
+      "rubix_host": "http://localhost:9000"
+    },
+    "secrets": {
+      "rubix_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiZThmMTM3OS02Njg0LTQzYjYtYTczNS02ZmE0M2E4N2I3NDgiLCJvcmdJZCI6InRlc3QiLCJ0ZWFtSWQiOiJ0ZW1fQUY3ODYzRDIxNjRFIiwicm9sZSI6Im9yZy1hZG1pbiIsImVtYWlsIjoiYWRtaW5AcnViaXguaW8iLCJhY2NvdW50VHlwZSI6InVzZXIiLCJleHAiOjE3Nzk5MDEyODgsIm5iZiI6MTc3NjMwMTI4OCwiaWF0IjoxNzc2MzAxMjg4fQ.4G6dlKQztfSRafppiMKMGRY8quPuFUpSJQOCFrHXCQo"
+    },
+    "stale": false,
+    "createdAt": "2026-04-15T02:30:47.316002277Z",
+    "updatedAt": "2026-04-15T02:30:47.316002348Z"
+  },
+  {
+    "id": "inst-d4d74c3a0a99d745",
+    "appName": "nube-marketing",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T02:30:47.32121086Z",
+    "updatedAt": "2026-04-15T02:30:47.321210911Z"
+  },
+  {
+    "id": "inst-9a0fdcd93f4c72ee",
+    "appName": "test-skill",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T08:03:45.735370734Z",
+    "updatedAt": "2026-04-15T08:03:45.735370769Z"
+  },
+  {
+    "id": "inst-bcdb4abd2c15e2c9",
+    "appName": "nube-admin",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T08:04:00.002167952Z",
+    "updatedAt": "2026-04-15T08:04:00.002168016Z"
+  },
+  {
+    "id": "inst-04650b44478d755b",
+    "appName": "sales-proposal",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T08:04:22.418280937Z",
+    "updatedAt": "2026-04-15T08:04:22.418281009Z"
+  },
+  {
+    "id": "inst-0d631c960aec93d2",
+    "appName": "shopping-list",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T13:22:25.822341381Z",
+    "updatedAt": "2026-04-15T13:22:25.822341426Z"
+  },
+  {
+    "id": "inst-69a8f30227a44c66",
+    "appName": "url-health-checker",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T14:09:09.099304591Z",
+    "updatedAt": "2026-04-15T14:09:09.099304641Z"
+  },
+  {
+    "id": "inst-c9bc060bcbb64212",
+    "appName": "qa-helper",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T15:30:17.079220234Z",
+    "updatedAt": "2026-04-15T15:30:17.079220234Z"
+  },
+  {
+    "id": "inst-fe9fd7111e2ef202",
+    "appName": "uptime-monitor",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T21:53:59.616884379Z",
+    "updatedAt": "2026-04-15T21:53:59.616884379Z"
+  },
+  {
+    "id": "inst-a87c8c261426f1ec",
+    "appName": "weather-checker",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {},
+    "secrets": {},
+    "stale": false,
+    "createdAt": "2026-04-15T22:33:18.336430382Z",
+    "updatedAt": "2026-04-15T22:33:18.336430382Z"
+  },
+  {
+    "id": "inst-e21f5f33707ed8c4",
+    "appName": "rubix",
+    "appVersion": "1.0.0",
+    "workspaceId": "ws-034035b77d22ccf3",
+    "userId": "usr-2d1a32a2a3c9c373",
+    "enabled": true,
+    "settings": {
+      "rubix_host": "http://localhost:9000"
+    },
+    "secrets": {
+      "rubix_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiZThmMTM3OS02Njg0LTQzYjYtYTczNS02ZmE0M2E4N2I3NDgiLCJvcmdJZCI6InRlc3QiLCJ0ZWFtSWQiOiJ0ZW1fQUY3ODYzRDIxNjRFIiwicm9sZSI6Im9yZy1hZG1pbiIsImVtYWlsIjoiYWRtaW5AcnViaXguaW8iLCJhY2NvdW50VHlwZSI6InVzZXIiLCJleHAiOjE3Nzk5MDE5MzcsIm5iZiI6MTc3NjMwMTkzNywiaWF0IjoxNzc2MzAxOTM3fQ.prw1jWPkFJEU92ZmJ_FxfR-7LB_lZhWRdBUb6yTBq8w"
+    },
+    "stale": false,
+    "createdAt": "2026-04-16T01:12:17.958809945Z",
+    "updatedAt": "2026-04-16T01:12:17.958810035Z"
+  }
+]

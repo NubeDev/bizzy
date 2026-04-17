@@ -11,11 +11,12 @@ import (
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/apps"
-	"github.com/NubeDev/bizzy/pkg/jsondb"
+	"github.com/NubeDev/bizzy/pkg/database"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -33,41 +34,17 @@ func main() {
 		addr = ":8090"
 	}
 
-	// Load JSON DB collections.
-	workspaces, err := jsondb.NewCollection[models.Workspace](filepath.Join(dataDir, "workspaces.json"))
+	// Open database (SQLite). Auto-migrates schema and imports legacy JSON files.
+	db, err := database.Open(dataDir)
 	if err != nil {
-		log.Fatalf("failed to load workspaces: %v", err)
-	}
-	users, err := jsondb.NewCollection[models.User](filepath.Join(dataDir, "users.json"))
-	if err != nil {
-		log.Fatalf("failed to load users: %v", err)
-	}
-	appInstalls, err := jsondb.NewCollection[models.AppInstall](filepath.Join(dataDir, "app_installs.json"))
-	if err != nil {
-		log.Fatalf("failed to load app_installs: %v", err)
-	}
-	sessions, err := jsondb.NewCollection[models.Session](filepath.Join(dataDir, "sessions.json"))
-	if err != nil {
-		log.Fatalf("failed to load sessions: %v", err)
-	}
-	storeApps, err := jsondb.NewCollection[models.StoreApp](filepath.Join(dataDir, "store_apps.json"))
-	if err != nil {
-		log.Fatalf("failed to load store_apps: %v", err)
-	}
-	appShares, err := jsondb.NewCollection[models.AppShare](filepath.Join(dataDir, "app_shares.json"))
-	if err != nil {
-		log.Fatalf("failed to load app_shares: %v", err)
-	}
-	appReviews, err := jsondb.NewCollection[models.AppReview](filepath.Join(dataDir, "app_reviews.json"))
-	if err != nil {
-		log.Fatalf("failed to load app_reviews: %v", err)
+		log.Fatalf("failed to open database: %v", err)
 	}
 
 	// Migrate: backfill provider="claude" on existing sessions that have no provider set.
-	migrateSessionProvider(sessions)
+	migrateSessionProvider(db)
 
 	// Migrate: store apps with inline content but no disk files → write to disk.
-	migrateStoreAppsToDisk(storeApps, appsDir)
+	migrateStoreAppsToDisk(db, appsDir)
 
 	// Load app registry from disk.
 	registry, err := apps.NewRegistry(appsDir)
@@ -75,26 +52,11 @@ func main() {
 		log.Fatalf("failed to load apps: %v", err)
 	}
 
-	// Sync: disk apps without a store_apps.json record → auto-create one.
-	syncDiskAppsToStore(registry, storeApps)
+	// Sync: disk apps without a store_apps record → auto-create one.
+	syncDiskAppsToStore(registry, db)
 
 	// Build MCP factory.
 	mcpFactory := apps.NewMCPFactory(registry)
-
-	// Load provider config (global, admin-managed).
-	providerConfig, err := jsondb.NewConfigFile[models.ProviderConfig](
-		filepath.Join(dataDir, "provider_config.json"),
-		models.DefaultProviderConfig(),
-	)
-	if err != nil {
-		log.Fatalf("failed to load provider_config: %v", err)
-	}
-
-	// Load workflow runs.
-	workflowRuns, err := jsondb.NewCollection[models.WorkflowRun](filepath.Join(dataDir, "workflow_runs.json"))
-	if err != nil {
-		log.Fatalf("failed to load workflow_runs: %v", err)
-	}
 
 	// Load workflow definitions from app directories.
 	wfStore := workflow.NewStore()
@@ -114,57 +76,52 @@ func main() {
 
 	// Create reusable application services.
 	agentSvc := &services.AgentService{
+		DB:          db,
 		Memory:      memStore,
 		MCPFactory:  mcpFactory,
-		AppInstalls: appInstalls,
-		Sessions:    sessions,
-		Users:       users,
 		Runners:     runners,
 		Jobs:        airunner.NewJobStore(),
 		AppRegistry: registry,
 	}
 
 	toolSvc := &services.ToolService{
-		AppInstalls: appInstalls,
+		DB:          db,
 		AppRegistry: registry,
 	}
 
 	a := &api.API{
-		Workspaces:     workspaces,
-		Users:          users,
-		AppInstalls:    appInstalls,
-		Sessions:       sessions,
-		AppRegistry:    registry,
-		MCPFactory:     mcpFactory,
-		Runners:        runners,
-		Jobs:           agentSvc.Jobs,
-		ProviderConfig: providerConfig,
-		Memory:         memStore,
-		StoreApps:      storeApps,
-		AppShares:      appShares,
-		AppReviews:     appReviews,
-		WorkflowStore:  wfStore,
-		AgentSvc:       agentSvc,
-		ToolSvc:        toolSvc,
+		DB:            db,
+		AppRegistry:   registry,
+		MCPFactory:    mcpFactory,
+		Runners:       runners,
+		Jobs:          agentSvc.Jobs,
+		Memory:        memStore,
+		WorkflowStore: wfStore,
+		AgentSvc:      agentSvc,
+		ToolSvc:       toolSvc,
 	}
 
 	// Wire up the workflow engine (uses services, not the API directly).
 	a.Workflows = workflow.NewRunner(
-		workflowRuns,
+		db,
 		wfStore,
 		api.NewWorkflowToolCaller(toolSvc),
 		api.NewWorkflowPromptRunner(agentSvc),
 	)
 
 	// Apply saved provider config to runners (host overrides, etc.).
-	a.ApplyProviderConfig(providerConfig.Get())
+	a.ApplyProviderConfig(a.ProviderConfigGet())
 
 	router := a.SetupRouter()
+
+	var userCount int64
+	db.Model(&models.User{}).Count(&userCount)
 
 	fmt.Fprintf(os.Stderr, "[nube-server] listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "[nube-server] apps: %d loaded from %s\n", len(registry.List()), appsDir)
 	fmt.Fprintf(os.Stderr, "[nube-server] workflows: %d loaded\n", wfCount)
-	if users.Count() == 0 {
+	fmt.Fprintf(os.Stderr, "[nube-server] database: SQLite (bizzy.db)\n")
+	if userCount == 0 {
 		fmt.Fprintf(os.Stderr, "[nube-server] no users found — POST /bootstrap to create the first admin\n")
 	}
 
@@ -175,8 +132,9 @@ func main() {
 
 // migrateStoreAppsToDisk writes disk files for any store app that has inline
 // content but no directory on disk yet.
-func migrateStoreAppsToDisk(storeApps *jsondb.Collection[models.StoreApp], appsDir string) {
-	all := storeApps.All()
+func migrateStoreAppsToDisk(db *gorm.DB, appsDir string) {
+	var all []models.StoreApp
+	db.Find(&all)
 	migrated := 0
 	for _, sa := range all {
 		appDir := filepath.Join(appsDir, sa.Name)
@@ -194,15 +152,13 @@ func migrateStoreAppsToDisk(storeApps *jsondb.Collection[models.StoreApp], appsD
 	}
 }
 
-// syncDiskAppsToStore creates store_apps.json records for any disk app that
+// syncDiskAppsToStore creates store_apps records for any disk app that
 // doesn't have one yet (e.g. system apps shipped with the code).
-func syncDiskAppsToStore(registry *apps.Registry, storeApps *jsondb.Collection[models.StoreApp]) {
+func syncDiskAppsToStore(registry *apps.Registry, db *gorm.DB) {
 	synced := 0
 	for _, app := range registry.List() {
-		_, found := storeApps.FindOne(func(sa models.StoreApp) bool {
-			return sa.Name == app.Name
-		})
-		if found {
+		var existing models.StoreApp
+		if err := db.Where("name = ?", app.Name).First(&existing).Error; err == nil {
 			continue
 		}
 
@@ -266,12 +222,12 @@ func syncDiskAppsToStore(registry *apps.Registry, storeApps *jsondb.Collection[m
 			sa.Prompts = append(sa.Prompts, sp)
 		}
 
-		storeApps.Create(sa)
+		db.Create(&sa)
 		synced++
 		log.Printf("[sync] created store record for disk app: %s", app.Name)
 	}
 	if synced > 0 {
-		log.Printf("[sync] synced %d disk apps to store_apps.json", synced)
+		log.Printf("[sync] synced %d disk apps to store", synced)
 	}
 }
 
@@ -287,19 +243,10 @@ func categoryFromTags(tags []string) string {
 
 // migrateSessionProvider backfills provider="claude" on sessions that predate
 // the multi-provider fields (Phase 1a).
-func migrateSessionProvider(sessions *jsondb.Collection[models.Session]) {
-	all := sessions.All()
-	migrated := 0
-	for _, s := range all {
-		if s.Provider != "" {
-			continue
-		}
-		s.Provider = "claude"
-		sessions.Update(s)
-		migrated++
-	}
-	if migrated > 0 {
-		log.Printf("[migrate] backfilled provider=claude on %d sessions", migrated)
+func migrateSessionProvider(db *gorm.DB) {
+	result := db.Model(&models.Session{}).Where("provider = '' OR provider IS NULL").Update("provider", "claude")
+	if result.RowsAffected > 0 {
+		log.Printf("[migrate] backfilled provider=claude on %d sessions", result.RowsAffected)
 	}
 }
 

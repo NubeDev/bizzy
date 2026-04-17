@@ -44,23 +44,17 @@ func (a *API) runAgentWS(c *gin.Context) {
 	var user models.User
 	token := c.Query("token")
 	if token != "" {
-		u, ok := a.Users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-		if !ok {
+		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
 			log.Printf("[agents-ws] invalid token")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
-		user = u
 	} else {
-		all := a.Users.All()
-		if len(all) == 0 {
+		if err := a.DB.First(&user).Error; err != nil {
 			log.Printf("[agents-ws] no users exist")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users — POST /bootstrap first"})
 			return
 		}
-		user = all[0]
 		log.Printf("[agents-ws] dev mode: using user %s (%s)", user.ID, user.Name)
 	}
 

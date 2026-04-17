@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/NubeDev/bizzy/pkg/jsondb"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type contextKey string
@@ -20,30 +20,28 @@ const (
 
 // Middleware returns a gin middleware that resolves bearer tokens to users.
 // In dev mode (no Authorization header), it falls back to the first user in the DB.
-func Middleware(users *jsondb.Collection[models.User]) gin.HandlerFunc {
+func Middleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 
 		var user models.User
-		var ok bool
+		var found bool
 
 		if strings.HasPrefix(header, "Bearer ") {
 			token := strings.TrimPrefix(header, "Bearer ")
-			user, ok = users.FindOne(func(u models.User) bool {
-				return u.Token == token
-			})
-			if !ok {
+			result := db.Where("token = ?", token).First(&user)
+			found = result.Error == nil
+			if !found {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 				return
 			}
 		} else {
 			// Dev mode: no token provided, use the first user.
-			all := users.All()
-			if len(all) == 0 {
+			result := db.First(&user)
+			if result.Error != nil {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no users exist — POST /bootstrap first"})
 				return
 			}
-			user = all[0]
 		}
 
 		// Store the authenticated user.
@@ -55,8 +53,8 @@ func Middleware(users *jsondb.Collection[models.User]) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "only admins can use X-Act-As-User"})
 				return
 			}
-			target, ok := users.Get(actAsID)
-			if !ok {
+			var target models.User
+			if err := db.First(&target, "id = ?", actAsID).Error; err != nil {
 				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "target user not found"})
 				return
 			}

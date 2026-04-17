@@ -4,22 +4,20 @@ import "time"
 
 // WorkflowRun tracks a single execution of a workflow.
 type WorkflowRun struct {
-	ID         string         `json:"id"`          // client-generated UUID, also serves as idempotency key
-	AppName    string         `json:"app"`
+	ID         string         `json:"id" gorm:"primaryKey"`
+	AppName    string         `json:"app" gorm:"index"`
 	Workflow   string         `json:"workflow"`
-	Inputs     map[string]any `json:"inputs"`
-	Status     WorkflowStatus `json:"status"`
-	Version    int            `json:"version"`     // increments on every stage transition, for efficient polling
-	Stages     []StageResult  `json:"stages"`
-	CurrentIdx int            `json:"current_idx"` // index of the currently executing stage
+	Inputs     map[string]any `json:"inputs" gorm:"serializer:json"`
+	Status     WorkflowStatus `json:"status" gorm:"index"`
+	Version    int            `json:"version"`
+	Stages     []StageResult  `json:"stages" gorm:"serializer:json"`
+	CurrentIdx int            `json:"current_idx"`
 	FailedAt   string         `json:"failed_at,omitempty"`
 	Error      string         `json:"error,omitempty"`
-	UserID     string         `json:"user_id"`
+	UserID     string         `json:"user_id" gorm:"index"`
 	CreatedAt  time.Time      `json:"created_at"`
 	FinishedAt *time.Time     `json:"finished_at,omitempty"`
 }
-
-func (w WorkflowRun) GetID() string { return w.ID }
 
 // CurrentStage returns the name of the currently executing stage, or empty if done.
 func (w WorkflowRun) CurrentStage() string {

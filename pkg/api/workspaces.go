@@ -23,7 +23,7 @@ func (a *API) createWorkspace(c *gin.Context) {
 		Name:      req.Name,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := a.Workspaces.Create(ws); err != nil {
+	if err := a.DB.Create(&ws).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -32,13 +32,14 @@ func (a *API) createWorkspace(c *gin.Context) {
 
 func (a *API) listWorkspaces(c *gin.Context) {
 	user := auth.GetUser(c)
-	// Admins see all workspaces, users see only their own.
 	if user.Role == models.RoleAdmin {
-		c.JSON(http.StatusOK, a.Workspaces.All())
+		var all []models.Workspace
+		a.DB.Find(&all)
+		c.JSON(http.StatusOK, all)
 		return
 	}
-	ws, ok := a.Workspaces.Get(user.WorkspaceID)
-	if !ok {
+	var ws models.Workspace
+	if err := a.DB.First(&ws, "id = ?", user.WorkspaceID).Error; err != nil {
 		c.JSON(http.StatusOK, []models.Workspace{})
 		return
 	}
@@ -46,8 +47,8 @@ func (a *API) listWorkspaces(c *gin.Context) {
 }
 
 func (a *API) getWorkspace(c *gin.Context) {
-	ws, ok := a.Workspaces.Get(c.Param("id"))
-	if !ok {
+	var ws models.Workspace
+	if err := a.DB.First(&ws, "id = ?", c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workspace not found"})
 		return
 	}
@@ -56,15 +57,14 @@ func (a *API) getWorkspace(c *gin.Context) {
 
 func (a *API) deleteWorkspace(c *gin.Context) {
 	id := c.Param("id")
-	// Check no users remain in this workspace.
-	users := a.Users.FindFunc(func(u models.User) bool {
-		return u.WorkspaceID == id
-	})
-	if len(users) > 0 {
+	var userCount int64
+	a.DB.Model(&models.User{}).Where("workspace_id = ?", id).Count(&userCount)
+	if userCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"error": "workspace still has users — delete them first"})
 		return
 	}
-	if err := a.Workspaces.Delete(id); err != nil {
+	result := a.DB.Delete(&models.Workspace{}, "id = ?", id)
+	if result.RowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workspace not found"})
 		return
 	}
@@ -73,7 +73,8 @@ func (a *API) deleteWorkspace(c *gin.Context) {
 
 func (a *API) createUser(c *gin.Context) {
 	wsID := c.Param("id")
-	if _, ok := a.Workspaces.Get(wsID); !ok {
+	var ws models.Workspace
+	if err := a.DB.First(&ws, "id = ?", wsID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workspace not found"})
 		return
 	}
@@ -104,7 +105,7 @@ func (a *API) createUser(c *gin.Context) {
 		Token:       models.GenerateToken(),
 		CreatedAt:   time.Now().UTC(),
 	}
-	if err := a.Users.Create(user); err != nil {
+	if err := a.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -113,8 +114,7 @@ func (a *API) createUser(c *gin.Context) {
 
 func (a *API) listWorkspaceUsers(c *gin.Context) {
 	wsID := c.Param("id")
-	users := a.Users.FindFunc(func(u models.User) bool {
-		return u.WorkspaceID == wsID
-	})
+	var users []models.User
+	a.DB.Where("workspace_id = ?", wsID).Find(&users)
 	c.JSON(http.StatusOK, users)
 }

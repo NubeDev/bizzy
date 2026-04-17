@@ -10,12 +10,10 @@ import (
 // --- Workspace ---
 
 type Workspace struct {
-	ID        string    `json:"id"`
+	ID        string    `json:"id" gorm:"primaryKey"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
 }
-
-func (w Workspace) GetID() string { return w.ID }
 
 // --- User ---
 
@@ -27,13 +25,13 @@ const (
 )
 
 type User struct {
-	ID          string           `json:"id"`
-	WorkspaceID string           `json:"workspaceId"`
+	ID          string           `json:"id" gorm:"primaryKey"`
+	WorkspaceID string           `json:"workspaceId" gorm:"index"`
 	Name        string           `json:"name"`
 	Email       string           `json:"email"`
 	Role        Role             `json:"role"`
-	Token       string           `json:"token"`
-	Preferences *UserPreferences `json:"preferences,omitempty"`
+	Token       string           `json:"token" gorm:"index"`
+	Preferences *UserPreferences `json:"preferences,omitempty" gorm:"serializer:json"`
 	CreatedAt   time.Time        `json:"createdAt"`
 }
 
@@ -42,8 +40,6 @@ type UserPreferences struct {
 	DefaultProvider string `json:"default_provider,omitempty"` // "claude", "ollama", etc.
 	DefaultModel    string `json:"default_model,omitempty"`    // "gemma3", "gpt-4.1", etc.
 }
-
-func (u User) GetID() string { return u.ID }
 
 // GenerateToken creates a random 32-byte hex token.
 func GenerateToken() string {
