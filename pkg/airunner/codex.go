@@ -2,6 +2,7 @@ package airunner
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -24,7 +25,7 @@ func (r *CodexRunner) Available() bool {
 	return err == nil
 }
 
-func (r *CodexRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
+func (r *CodexRunner) Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 	var result RunResult
 
 	codexPath, err := exec.LookPath("codex")
@@ -43,7 +44,7 @@ func (r *CodexRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)) 
 	}
 	args = append(args, cfg.Prompt)
 
-	cmd := exec.Command(codexPath, args...)
+	cmd := exec.CommandContext(ctx, codexPath, args...)
 	if cfg.WorkDir != "" {
 		cmd.Dir = cfg.WorkDir
 	}
@@ -100,6 +101,8 @@ func (r *CodexRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)) 
 
 	elapsed := time.Since(start)
 	result.Text = textBuf.String()
+	result.Provider = string(ProviderCodex)
+	result.Model = model
 	result.DurationMS = int(elapsed.Milliseconds())
 
 	onEvent(Event{

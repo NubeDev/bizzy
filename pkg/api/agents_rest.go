@@ -42,10 +42,7 @@ func (a *API) runAgentREST(c *gin.Context) {
 		return
 	}
 
-	provider := airunner.Provider(req.Provider)
-	if provider == "" {
-		provider = airunner.ProviderClaude
-	}
+	provider, model := resolveProvider(req.Provider, req.Model, user)
 
 	runner, err := a.Runners.Get(provider)
 	if err != nil {
@@ -71,32 +68,38 @@ func (a *API) runAgentREST(c *gin.Context) {
 
 	// Collect events (the caller gets the final result, not a stream).
 	var events []airunner.Event
-	result := runner.Run(airunner.RunConfig{
+	result := runner.Run(c.Request.Context(), airunner.RunConfig{
 		Prompt:       req.Prompt,
 		MCPURL:       mcpURL,
 		MCPToken:     user.Token,
 		AllowedTools: "mcp__nube__*",
-		Model:        req.Model,
+		Model:        model,
 	}, sessionID, func(ev airunner.Event) {
 		events = append(events, ev)
 	})
 
 	// Persist session.
 	a.Sessions.Create(models.Session{
-		ID:         sessionID,
-		Agent:      req.Agent,
-		Prompt:     req.Prompt,
-		Result:     result.Text,
-		Status:     "done",
-		DurationMS: result.DurationMS,
-		CostUSD:    result.CostUSD,
-		UserID:     user.ID,
-		CreatedAt:  time.Now().UTC(),
+		ID:              sessionID,
+		Provider:        result.Provider,
+		Model:           result.Model,
+		ClaudeSessionID: result.ClaudeSessionID,
+		Agent:           req.Agent,
+		Prompt:          req.Prompt,
+		Result:          result.Text,
+		Status:          "done",
+		DurationMS:      result.DurationMS,
+		CostUSD:         result.CostUSD,
+		InputTokens:     result.InputTokens,
+		OutputTokens:    result.OutputTokens,
+		ToolCalls:       result.ToolCalls,
+		UserID:          user.ID,
+		CreatedAt:       time.Now().UTC(),
 	})
 
 	c.JSON(http.StatusOK, runAgentResponse{
 		SessionID:  sessionID,
-		Provider:   string(provider),
+		Provider:   result.Provider,
 		Text:       result.Text,
 		DurationMS: result.DurationMS,
 		CostUSD:    result.CostUSD,

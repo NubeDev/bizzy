@@ -1,6 +1,6 @@
 # Backend: nube-server
 
-The main API server for NubeIO. Manages workspaces, users, the app store, app installs, MCP tool serving, and agent sessions -- all in a single process.
+The main API server for NubeIO. Manages workspaces, users, the app store, app installs, MCP tool serving, AI agent sessions, and multi-provider AI execution — all in a single process.
 
 ---
 
@@ -28,6 +28,10 @@ Returns `{workspace, user, token}`. Use the token as `Authorization: Bearer <tok
 |---|---|---|
 | `NUBE_ADDR` | `:8090` | Listen address |
 | `NUBE_DATA_DIR` | `./data` | Data directory (resolved to absolute path on startup) |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server address |
+| `OPENAI_API_KEY` | — | OpenAI API key (Phase 3) |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key (Phase 3) |
+| `GEMINI_API_KEY` | — | Gemini API key (Phase 3) |
 
 Apps live at `$NUBE_DATA_DIR/apps/`. There is no separate apps directory env var.
 
@@ -57,19 +61,18 @@ data/
   app_reviews.json         # Ratings and comments
   workspaces.json          # Multi-tenant workspaces
   users.json               # Users with bearer tokens
-  sessions.json            # Agent session history
+  sessions.json            # Agent session history (provider, model, cost, tokens)
 ```
 
 All JSON collections use `pkg/jsondb.Collection[T]` -- thread-safe, atomic writes (tmp + rename).
 
-### Startup sync
+### Startup migrations
 
-On startup the server runs two sync operations:
+On startup the server runs:
 
-1. **Store-to-disk migration**: any `StoreApp` record with inline tools/prompts but no disk directory gets its files written to `data/apps/`.
-2. **Disk-to-store sync**: any app on disk without a `store_apps.json` record gets one auto-created (visibility=public, author from app.yaml).
-
-This means system apps shipped with the code (e.g. nube-marketing) automatically appear in the store alongside user-created apps.
+1. **Session provider backfill**: existing sessions without a `provider` field get `provider="claude"`.
+2. **Store-to-disk migration**: any `StoreApp` record with inline tools/prompts but no disk directory gets its files written to `data/apps/`.
+3. **Disk-to-store sync**: any app on disk without a `store_apps.json` record gets one auto-created (visibility=public, author from app.yaml).
 
 ---
 
@@ -114,7 +117,7 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 | `POST` | `/workspaces/:id/users` | admin | Create user in workspace |
 | `GET` | `/workspaces/:id/users` | user | List workspace users |
 
-### App store -- see [STORE.md](STORE.md) for full details
+### App store — see [STORE.md](STORE.md) for full details
 
 | Method | Path | Description |
 |---|---|---|
@@ -133,22 +136,25 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 | `PATCH` | `/app-installs/:id` | user | Update install (settings, enable/disable) |
 | `DELETE` | `/app-installs/:id` | user | Uninstall |
 
-### Agents
+### Agents — AI execution
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/agents` | List agents (derived from installed apps) |
 | `POST` | `/api/agents/tools/:name` | Call a tool directly (e.g. `weather-checker.get_weather`) |
-| `GET` | `/api/agents/sessions` | List session history |
-| `GET` | `/api/agents/sessions/:id` | Get session detail |
-| `GET` | `/api/agents/providers` | List AI providers |
-| `POST` | `/api/agents/run/sync` | Synchronous agent run |
+| `GET` | `/api/agents/providers` | List AI providers (name, available, type, models[]) |
+| `POST` | `/api/agents/run/sync` | Synchronous agent run (blocks until done) |
+| `POST` | `/api/agents/jobs` | Submit async AI job (returns job_id immediately) |
+| `GET` | `/api/agents/jobs/:id` | Poll job status and events (`?after=N` for incremental) |
+| `DELETE` | `/api/agents/jobs/:id` | Cancel a running job |
+| `GET` | `/api/agents/sessions` | List session history (provider, model, cost, tokens) |
+| `GET` | `/api/agents/sessions/:id` | Get session detail with full result text |
 
 ### WebSocket
 
 | Path | Auth | Description |
 |---|---|---|
-| `/api/agents/run` | `?token=` | Streaming agent chat |
+| `/api/agents/run` | `?token=` | Streaming agent chat (any provider) |
 | `/api/agents/qa` | `?token=` | Interactive QA wizard flows |
 
 ### MCP
@@ -165,17 +171,79 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 
 ---
 
+## AI provider system
+
+The server supports multiple AI providers through a unified `Runner` interface. See [MULTI-PROVIDER.md](MULTI-PROVIDER.md) for full details.
+
+### Available providers
+
+| Provider | Type | How it works | Status |
+|---|---|---|---|
+| **Claude** | CLI | Shells out to `claude` binary, native MCP + session resume | Production |
+| **Ollama** | API | HTTP to local `/api/chat`, streaming, model discovery | Production |
+| **OpenAI** | API | OpenAI chat completions API | Phase 3 |
+| **Anthropic** | API | Anthropic Messages API | Phase 3 |
+| **Gemini** | API | OpenAI-compatible endpoint | Phase 3 |
+| **Codex** | CLI | OpenAI Codex CLI binary | Legacy |
+| **Copilot** | CLI | GitHub Copilot via `gh copilot` | Legacy |
+
+### Provider selection
+
+Every AI endpoint accepts `provider` and `model` parameters:
+
+```bash
+# WS (frontend/CLI)
+{"prompt": "...", "provider": "ollama", "model": "gemma3"}
+
+# REST sync
+POST /api/agents/run/sync  {"prompt": "...", "provider": "ollama", "model": "gemma3"}
+
+# Job submit
+POST /api/agents/jobs      {"prompt": "...", "provider": "ollama", "model": "gemma3"}
+
+# CLI
+nube ask --provider ollama --model gemma3 "hello"
+```
+
+Default provider is `claude` if not specified.
+
+### Job system
+
+For async/automation use. Submit a job, get a UUID, poll for events:
+
+```bash
+# Submit
+curl -X POST localhost:8090/api/agents/jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"prompt":"generate report","provider":"ollama","model":"gemma3"}'
+# Returns: {"job_id": "job-xxx", "status": "running"}
+
+# Poll (incremental)
+curl localhost:8090/api/agents/jobs/job-xxx?after=2 \
+  -H "Authorization: Bearer $TOKEN"
+
+# Cancel
+curl -X DELETE localhost:8090/api/agents/jobs/job-xxx \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Jobs store events in memory with a 10-minute cleanup after completion. Sessions are persisted to `sessions.json` on job completion.
+
+---
+
 ## MCP tool serving
 
 The `MCPFactory` builds a per-user MCP server scoped to their installed apps:
 
 1. Iterates the user's `AppInstall` records.
-2. For each enabled install, looks up the app in the registry (all apps live in one directory).
+2. For each enabled install, looks up the app in the registry.
 3. Registers three types per app:
-   - **OpenAPI tools** -- from `openapi.yaml`, base URL + auth token from user settings.
-   - **JS tools** -- sandboxed Goja runtime with host APIs (`http.*`, `secrets.*`, `config.*`, `log.*`, `files.read`). Timeout per app (default 5s, configurable in app.yaml).
-   - **Prompts** -- markdown templates with `{{key}}` substitution.
+   - **OpenAPI tools** — from `openapi.yaml`, base URL + auth token from user settings.
+   - **JS tools** — sandboxed Goja runtime with host APIs (`http.*`, `secrets.*`, `config.*`, `log.*`, `files.read`). Timeout per app (default 5s).
+   - **Prompts** — markdown templates with `{{key}}` substitution.
 4. All names are namespaced: `appName.toolName`, `appName.promptName`.
+
+See [MCP.md](MCP.md) for full details.
 
 ---
 
@@ -200,6 +268,26 @@ The `MCPFactory` builds a per-user MCP server scoped to their installed apps:
 | `role` | string | `admin` or `user` |
 | `token` | string | 32-byte hex bearer token |
 | `createdAt` | time | |
+
+### Session
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | `ses-` prefix |
+| `provider` | string | `claude`, `ollama`, `openai`, etc. |
+| `model` | string | Model name used |
+| `claude_session_id` | string | Claude CLI session ID for `--resume` |
+| `agent` | string | App/agent name |
+| `prompt` | string | User's prompt |
+| `result` | string | Full response text |
+| `status` | string | `done`, `error`, `cancelled` |
+| `duration_ms` | int | Execution time |
+| `cost_usd` | float | API cost ($0 for local providers) |
+| `input_tokens` | int | Prompt tokens |
+| `output_tokens` | int | Completion tokens |
+| `tool_calls` | int | Number of tool invocations |
+| `user_id` | string | Owner |
+| `created_at` | time | |
 
 ### AppInstall
 

@@ -27,13 +27,20 @@ const (
 )
 
 type User struct {
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspaceId"`
-	Name        string    `json:"name"`
-	Email       string    `json:"email"`
-	Role        Role      `json:"role"`
-	Token       string    `json:"token"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID          string           `json:"id"`
+	WorkspaceID string           `json:"workspaceId"`
+	Name        string           `json:"name"`
+	Email       string           `json:"email"`
+	Role        Role             `json:"role"`
+	Token       string           `json:"token"`
+	Preferences *UserPreferences `json:"preferences,omitempty"`
+	CreatedAt   time.Time        `json:"createdAt"`
+}
+
+// UserPreferences holds per-user AI defaults.
+type UserPreferences struct {
+	DefaultProvider string `json:"default_provider,omitempty"` // "claude", "ollama", etc.
+	DefaultModel    string `json:"default_model,omitempty"`    // "gemma3", "gpt-4.1", etc.
 }
 
 func (u User) GetID() string { return u.ID }

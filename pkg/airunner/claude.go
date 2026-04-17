@@ -1,6 +1,7 @@
 package airunner
 
 import (
+	"context"
 	"os/exec"
 
 	"github.com/NubeDev/bizzy/pkg/claude"
@@ -16,13 +17,18 @@ func (r *ClaudeRunner) Available() bool {
 	return err == nil
 }
 
-func (r *ClaudeRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
-	res := claude.Run(claude.RunConfig{
+func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
+	var toolCalls int
+	res := claude.Run(ctx, claude.RunConfig{
 		Prompt:       cfg.Prompt,
+		ResumeID:     cfg.ResumeID,
 		MCPURL:       cfg.MCPURL,
 		MCPToken:     cfg.MCPToken,
 		AllowedTools: cfg.AllowedTools,
 	}, sessionID, func(ev claude.Event) {
+		if ev.Type == "tool_call" {
+			toolCalls++
+		}
 		// Convert claude.Event → airunner.Event
 		onEvent(Event{
 			Type:       ev.Type,
@@ -38,8 +44,11 @@ func (r *ClaudeRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event))
 	})
 
 	return RunResult{
-		Text:       res.Text,
-		DurationMS: res.DurationMS,
-		CostUSD:    res.CostUSD,
+		Text:            res.Text,
+		Provider:        string(ProviderClaude),
+		ClaudeSessionID: res.ClaudeSessionID,
+		DurationMS:      res.DurationMS,
+		CostUSD:         res.CostUSD,
+		ToolCalls:       toolCalls,
 	}
 }

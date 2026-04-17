@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sun, Moon } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
+import { motion } from "motion/react"
 
 const navItems = [
   { label: "Store", url: "/" },
@@ -29,12 +30,33 @@ export function AppShell() {
         {/* Left: logo + nav together */}
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center shrink-0">
-            <svg width="30" height="30" viewBox="0 0 28 28" fill="none" className="text-white dark:text-white">
-              <rect x="4" y="4" width="8" height="8" fill="currentColor" opacity="0.9" />
-              <rect x="16" y="4" width="8" height="8" fill="currentColor" opacity="0.5" />
-              <rect x="4" y="16" width="8" height="8" fill="currentColor" opacity="0.5" />
-              <rect x="16" y="16" width="8" height="8" fill="currentColor" opacity="0.25" />
-            </svg>
+            <motion.svg
+              width="30" height="30" viewBox="0 0 28 28" fill="none"
+              initial="hidden"
+              animate="visible"
+              variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+            >
+              {/* top-left: indigo */}
+              <motion.rect x="4" y="4" width="8" height="8" fill="#6366f1"
+                variants={{ hidden: { opacity: 0, scale: 0.4 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: "backOut" } } }}
+                style={{ transformOrigin: "8px 8px" }}
+              />
+              {/* top-right: cyan */}
+              <motion.rect x="16" y="4" width="8" height="8" fill="#22d3ee"
+                variants={{ hidden: { opacity: 0, scale: 0.4 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: "backOut" } } }}
+                style={{ transformOrigin: "20px 8px" }}
+              />
+              {/* bottom-left: emerald */}
+              <motion.rect x="4" y="16" width="8" height="8" fill="#34d399"
+                variants={{ hidden: { opacity: 0, scale: 0.4 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: "backOut" } } }}
+                style={{ transformOrigin: "8px 20px" }}
+              />
+              {/* bottom-right: pink */}
+              <motion.rect x="16" y="16" width="8" height="8" fill="#f472b6"
+                variants={{ hidden: { opacity: 0, scale: 0.4 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: "backOut" } } }}
+                style={{ transformOrigin: "20px 20px" }}
+              />
+            </motion.svg>
           </Link>
 
           <nav className="hidden sm:flex items-center gap-7">

@@ -18,7 +18,9 @@ type API struct {
 	Sessions    *jsondb.Collection[models.Session]
 	AppRegistry *apps.Registry
 	MCPFactory  *apps.MCPFactory
-	Runners     *airunner.Registry // AI CLI providers (claude, codex, copilot)
+	Runners        *airunner.Registry                          // AI providers (claude, ollama, openai, etc.)
+	Jobs           *airunner.JobStore                          // In-memory async job store
+	ProviderConfig *jsondb.ConfigFile[models.ProviderConfig]   // Global provider settings (admin)
 
 	// Store collections.
 	StoreApps  *jsondb.Collection[models.StoreApp]
@@ -111,12 +113,25 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.GET("/api/agents/sessions/:id", a.getSession)
 	authed.GET("/api/agents/providers", a.listProviders)
 	authed.POST("/api/agents/run/sync", a.runAgentREST)
+	authed.GET("/api/agents/jobs", a.listJobs)
+	authed.POST("/api/agents/jobs", a.submitJob)
+	authed.GET("/api/agents/jobs/:id", a.pollJob)
+	authed.DELETE("/api/agents/jobs/:id", a.cancelJob)
+
+	// Provider test (any authenticated user).
+	authed.POST("/api/agents/providers/:name/test", a.testProvider)
+
+	// User preferences.
+	authed.GET("/users/me/preferences", a.getUserPreferences)
+	authed.PUT("/users/me/preferences", a.updateUserPreferences)
 
 	// Agent WebSocket endpoints (auth via ?token= query param).
 	r.GET("/api/agents/run", a.runAgentWS)
 	r.GET("/api/agents/qa", a.runQAWS)
 
-	// Admin: reload apps from disk.
+	// Admin: provider config + reload.
+	admin.GET("/api/settings/providers", a.getProviderConfig)
+	admin.PUT("/api/settings/providers", a.updateProviderConfig)
 	admin.POST("/admin/reload-apps", a.reloadApps)
 
 	// MCP endpoint: per-user tool serving.

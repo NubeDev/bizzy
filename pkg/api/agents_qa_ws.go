@@ -183,7 +183,7 @@ func (a *API) runQAWS(c *gin.Context) {
 			conn.WriteJSON(genEvent)
 
 			mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
-			claudeResult := claude.Run(claude.RunConfig{
+			claudeResult := claude.Run(c.Request.Context(), claude.RunConfig{
 				Prompt:       prompt,
 				MCPURL:       mcpURL,
 				MCPToken:     user.Token,
@@ -206,15 +206,17 @@ func (a *API) runQAWS(c *gin.Context) {
 			answersJSON, _ := json.Marshal(answers)
 
 			a.Sessions.Create(models.Session{
-				ID:         sessionID,
-				Agent:      manifest.AppName,
-				Prompt:     string(answersJSON),
-				Result:     claudeResult.Text,
-				Status:     "done",
-				DurationMS: claudeResult.DurationMS,
-				CostUSD:    claudeResult.CostUSD,
-				UserID:     user.ID,
-				CreatedAt:  time.Now().UTC(),
+				ID:              sessionID,
+				Provider:        "claude",
+				ClaudeSessionID: claudeResult.ClaudeSessionID,
+				Agent:           manifest.AppName,
+				Prompt:          string(answersJSON),
+				Result:          claudeResult.Text,
+				Status:          "done",
+				DurationMS:      claudeResult.DurationMS,
+				CostUSD:         claudeResult.CostUSD,
+				UserID:          user.ID,
+				CreatedAt:       time.Now().UTC(),
 			})
 
 			conn.WriteMessage(

@@ -60,6 +60,9 @@ func main() {
 		log.Fatalf("failed to load app_reviews: %v", err)
 	}
 
+	// Migrate: backfill provider="claude" on existing sessions that have no provider set.
+	migrateSessionProvider(sessions)
+
 	// Migrate: store apps with inline content but no disk files → write to disk.
 	migrateStoreAppsToDisk(storeApps, appsDir)
 
@@ -75,18 +78,34 @@ func main() {
 	// Build MCP factory.
 	mcpFactory := apps.NewMCPFactory(registry)
 
-	a := &api.API{
-		Workspaces:  workspaces,
-		Users:       users,
-		AppInstalls: appInstalls,
-		Sessions:    sessions,
-		AppRegistry: registry,
-		MCPFactory:  mcpFactory,
-		Runners:     airunner.NewRegistry(),
-		StoreApps:   storeApps,
-		AppShares:   appShares,
-		AppReviews:  appReviews,
+	// Load provider config (global, admin-managed).
+	providerConfig, err := jsondb.NewConfigFile[models.ProviderConfig](
+		filepath.Join(dataDir, "provider_config.json"),
+		models.DefaultProviderConfig(),
+	)
+	if err != nil {
+		log.Fatalf("failed to load provider_config: %v", err)
 	}
+
+	runners := airunner.NewRegistry()
+
+	a := &api.API{
+		Workspaces:     workspaces,
+		Users:          users,
+		AppInstalls:    appInstalls,
+		Sessions:       sessions,
+		AppRegistry:    registry,
+		MCPFactory:     mcpFactory,
+		Runners:        runners,
+		Jobs:           airunner.NewJobStore(),
+		ProviderConfig: providerConfig,
+		StoreApps:      storeApps,
+		AppShares:      appShares,
+		AppReviews:     appReviews,
+	}
+
+	// Apply saved provider config to runners (host overrides, etc.).
+	a.ApplyProviderConfig(providerConfig.Get())
 
 	router := a.SetupRouter()
 
@@ -211,6 +230,24 @@ func categoryFromTags(tags []string) string {
 		}
 	}
 	return "utilities"
+}
+
+// migrateSessionProvider backfills provider="claude" on sessions that predate
+// the multi-provider fields (Phase 1a).
+func migrateSessionProvider(sessions *jsondb.Collection[models.Session]) {
+	all := sessions.All()
+	migrated := 0
+	for _, s := range all {
+		if s.Provider != "" {
+			continue
+		}
+		s.Provider = "claude"
+		sessions.Update(s)
+		migrated++
+	}
+	if migrated > 0 {
+		log.Printf("[migrate] backfilled provider=claude on %d sessions", migrated)
+	}
 }
 
 func convertSettings(defs []apps.SettingDef) []models.SettingDef {

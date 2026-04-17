@@ -15,6 +15,7 @@ type Registry struct {
 func NewRegistry() *Registry {
 	r := &Registry{runners: make(map[Provider]Runner)}
 	r.Register(&ClaudeRunner{})
+	r.Register(&OllamaRunner{})
 	r.Register(&CodexRunner{})
 	r.Register(&CopilotRunner{})
 	return r
@@ -38,22 +39,49 @@ func (r *Registry) Get(provider Provider) (Runner, error) {
 	return runner, nil
 }
 
-// Available returns the list of providers whose CLI binary is installed.
+// Available returns the list of providers and their availability/models.
 func (r *Registry) Available() []ProviderInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []ProviderInfo
 	for _, runner := range r.runners {
-		out = append(out, ProviderInfo{
+		info := ProviderInfo{
 			Provider:  runner.Name(),
 			Available: runner.Available(),
-		})
+			Type:      "cli",
+		}
+		// API-based providers.
+		switch runner.Name() {
+		case ProviderOllama, ProviderOpenAI, ProviderAnthropic, ProviderGemini:
+			info.Type = "api"
+		}
+		// If the runner can list models, include them.
+		if lister, ok := runner.(ModelLister); ok && info.Available {
+			if models, err := lister.InstalledModels(); err == nil {
+				info.Models = models
+			}
+		}
+		out = append(out, info)
 	}
 	return out
+}
+
+// ModelLister is an optional interface runners can implement to report
+// which models are installed/available.
+type ModelLister interface {
+	InstalledModels() ([]string, error)
+}
+
+// Configurable is an optional interface runners can implement to accept
+// runtime configuration (API keys, host URLs) from the admin config.
+type Configurable interface {
+	Configure(host, apiKey string)
 }
 
 // ProviderInfo describes a registered provider and its availability.
 type ProviderInfo struct {
 	Provider  Provider `json:"provider"`
 	Available bool     `json:"available"`
+	Type      string   `json:"type"`             // "cli" or "api"
+	Models    []string `json:"models,omitempty"`
 }

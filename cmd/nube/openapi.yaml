@@ -66,6 +66,8 @@ components:
       type: object
       properties:
         id:                { type: string }
+        provider:          { type: string }
+        model:             { type: string }
         claude_session_id: { type: string }
         agent:             { type: string }
         prompt:            { type: string }
@@ -73,8 +75,35 @@ components:
         status:            { type: string }
         duration_ms:       { type: integer }
         cost_usd:          { type: number }
+        input_tokens:      { type: integer }
+        output_tokens:     { type: integer }
+        tool_calls:        { type: integer }
         user_id:           { type: string }
         created_at:        { type: string, format: date-time }
+
+    Job:
+      type: object
+      properties:
+        job_id:   { type: string }
+        status:   { type: string, enum: [running, done, error, cancelled] }
+        provider: { type: string }
+        model:    { type: string }
+        events:   { type: array, items: { $ref: '#/components/schemas/JobEvent' } }
+        result:   { type: string }
+
+    JobEvent:
+      type: object
+      properties:
+        index:       { type: integer }
+        type:        { type: string }
+        provider:    { type: string }
+        session_id:  { type: string }
+        model:       { type: string }
+        name:        { type: string }
+        content:     { type: string }
+        error:       { type: string }
+        duration_ms: { type: integer }
+        cost_usd:    { type: number }
 
     StoreApp:
       type: object
@@ -691,8 +720,7 @@ paths:
     get:
       operationId: listMyTools
       summary: List tools available to you (from installed apps)
-      x-cli:
-        command: tools list
+      # x-cli: replaced by hand-written "nube tools" command
       responses:
         "200":
           description: OK
@@ -701,8 +729,7 @@ paths:
     get:
       operationId: listMyPrompts
       summary: List prompts available to you (from installed apps)
-      x-cli:
-        command: prompts list
+      # x-cli: replaced by hand-written "nube prompts" command
       responses:
         "200":
           description: OK
@@ -711,8 +738,7 @@ paths:
     get:
       operationId: getPrompt
       summary: Render a prompt with arguments
-      x-cli:
-        command: prompts get
+      # x-cli: replaced by hand-written "nube prompts <name>" command
       parameters:
         - name: name
           in: path
@@ -811,6 +837,60 @@ paths:
         "200":
           description: Agent result
 
+  /api/agents/jobs:
+    post:
+      operationId: submitJob
+      summary: Submit an async AI job (returns immediately with job ID)
+      # x-cli: hand-written command in cmd_agents.go (supports streaming poll)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:   { type: string, description: The prompt to send }
+                agent:    { type: string, description: "Agent/app name (optional)" }
+                provider: { type: string, description: "AI provider (default: claude)" }
+                model:    { type: string, description: "Model override" }
+      responses:
+        "202":
+          description: Job submitted
+
+  /api/agents/jobs/{id}:
+    get:
+      operationId: pollJob
+      summary: Poll job status and events
+      # x-cli: hand-written command in cmd_agents.go (supports streaming poll)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: Job ID
+        - name: after
+          in: query
+          required: false
+          schema: { type: integer }
+          description: "Only return events with index > after (incremental polling)"
+      responses:
+        "200":
+          description: Job state and events
+    delete:
+      operationId: cancelJob
+      summary: Cancel a running job
+      # x-cli: could add hand-written cancel command later
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: Job ID
+      responses:
+        "200":
+          description: Job cancelled
+
   /api/agents/sessions:
     get:
       operationId: listSessions
@@ -838,8 +918,91 @@ paths:
           description: OK
 
   # ---------------------------------------------------------------------------
+  # Provider test
+  # ---------------------------------------------------------------------------
+
+  /api/agents/providers/{name}/test:
+    post:
+      operationId: testProvider
+      summary: Test connectivity to a specific AI provider
+      x-cli:
+        command: agents test
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: "Provider name (claude, ollama, openai, etc.)"
+      responses:
+        "200":
+          description: Test result with availability, latency, and models
+
+  # ---------------------------------------------------------------------------
+  # User preferences
+  # ---------------------------------------------------------------------------
+
+  /users/me/preferences:
+    get:
+      operationId: getUserPreferences
+      summary: Get current user's AI preferences (default provider/model)
+      x-cli:
+        command: preferences get
+      responses:
+        "200":
+          description: OK
+    put:
+      operationId: updateUserPreferences
+      summary: Set current user's default AI provider and model
+      x-cli:
+        command: preferences set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_provider: { type: string, description: "Default provider (claude, ollama, openai, etc.)" }
+                default_model:    { type: string, description: "Default model (gemma3, gpt-4.1, etc.)" }
+      responses:
+        "200":
+          description: Preferences updated
+
+  # ---------------------------------------------------------------------------
   # Admin
   # ---------------------------------------------------------------------------
+
+  /api/settings/providers:
+    get:
+      operationId: getProviderConfig
+      summary: Get global provider configuration (admin)
+      x-cli:
+        command: admin providers
+      responses:
+        "200":
+          description: Provider config with availability
+    put:
+      operationId: updateProviderConfig
+      summary: Update global provider configuration (admin)
+      # x-cli: admin-only, use curl or frontend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                providers:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      enabled: { type: boolean }
+                      api_key: { type: string }
+                      host:    { type: string }
+      responses:
+        "200":
+          description: Config updated
 
   /admin/reload-apps:
     post:

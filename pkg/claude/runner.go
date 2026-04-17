@@ -4,6 +4,7 @@ package claude
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -42,9 +43,9 @@ type RunResult struct {
 }
 
 // Run spawns claude and sends parsed events to the callback.
-// It blocks until the process exits. The callback is called
-// sequentially from one goroutine.
-func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
+// It blocks until the process exits or the context is cancelled.
+// The callback is called sequentially from one goroutine.
+func Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 	var result RunResult
 
 	claudePath, err := exec.LookPath("claude")
@@ -73,7 +74,7 @@ func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 		args = append(args, "--resume", cfg.ResumeID)
 	}
 
-	cmd := exec.Command(claudePath, args...)
+	cmd := exec.CommandContext(ctx, claudePath, args...)
 	cmd.Stdin = strings.NewReader(cfg.Prompt)
 	cmd.Stderr = nil
 
