@@ -72,8 +72,8 @@ export function useAddTool() {
 export function useUpdateTool() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ appId, name, tool }: { appId: string; name: string; tool: StoreTool }) =>
-      api.updateTool(appId, name, tool),
+    mutationFn: ({ appId, name, tool, changeSummary }: { appId: string; name: string; tool: StoreTool; changeSummary?: string }) =>
+      api.updateTool(appId, name, tool, changeSummary),
     onSuccess: (_, { appId }) => {
       qc.invalidateQueries({ queryKey: ['my', 'app', appId] })
     },

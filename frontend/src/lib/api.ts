@@ -116,15 +116,26 @@ class ApiClient {
       body: JSON.stringify(tool),
     })
   }
-  updateTool(appId: string, name: string, tool: StoreTool) {
+  updateTool(appId: string, name: string, tool: StoreTool, changeSummary?: string) {
     return this.request<StoreTool>(`/api/my/apps/${appId}/tools/${name}`, {
       method: 'PUT',
       body: JSON.stringify(tool),
+      headers: changeSummary ? { 'X-Change-Summary': changeSummary } : undefined,
     })
   }
   deleteTool(appId: string, name: string) {
     return this.request<void>(`/api/my/apps/${appId}/tools/${name}`, {
       method: 'DELETE',
+    })
+  }
+
+  // Revision history
+  listRevisions(appId: string, entityType: string, entityName: string) {
+    return this.request<unknown[]>(`/api/my/apps/${appId}/revisions/${entityType}/${entityName}`)
+  }
+  revertRevision(appId: string, entityType: string, entityName: string, rev: number) {
+    return this.request<unknown>(`/api/my/apps/${appId}/revisions/${entityType}/${entityName}/revert/${rev}`, {
+      method: 'POST',
     })
   }
 

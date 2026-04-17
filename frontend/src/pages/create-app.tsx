@@ -1,9 +1,5 @@
-import { AppWizard } from "@/components/store/app-wizard"
+import { AppBuilder } from "@/components/app-builder/builder-layout"
 
 export function CreateAppPage() {
-  return (
-    <div className="p-6">
-      <AppWizard />
-    </div>
-  )
+  return <AppBuilder />
 }

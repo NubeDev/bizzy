@@ -11,6 +11,8 @@ import (
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/plugin"
+	"github.com/NubeDev/bizzy/pkg/revision"
+	"github.com/NubeDev/bizzy/pkg/secrets"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/version"
 	"github.com/NubeDev/bizzy/pkg/workflow"
@@ -42,6 +44,12 @@ type API struct {
 	// Command bus (optional — nil if not configured).
 	CmdRouter      *command.Router
 	WebhookHandler func(http.ResponseWriter, *http.Request) // set by main if webhook adapter is enabled
+
+	// Revision history for undo/revert.
+	Revisions *revision.Store
+
+	// Encrypted secrets store (optional — nil if not configured).
+	Secrets *secrets.Store
 }
 
 // ProviderConfigGet loads the provider config from the database.
@@ -225,6 +233,22 @@ func (a *API) SetupRouter() *gin.Engine {
 		plugins.POST("/:name/enable", a.enablePlugin)
 	}
 
+	// --- Secrets ---
+	if a.Secrets != nil {
+		// Global secrets (admin only).
+		sec := admin.Group("/api/secrets")
+		sec.GET("", a.listAllSecrets)
+		sec.GET("/:ownerType/:ownerName", a.listGlobalSecrets)
+		sec.PUT("/:ownerType/:ownerName/:key", a.setGlobalSecret)
+		sec.DELETE("/:ownerType/:ownerName/:key", a.deleteGlobalSecret)
+
+		// User secrets (per-user, any authenticated user).
+		userSec := authed.Group("/api/secrets/me")
+		userSec.GET("/:ownerType/:ownerName", a.listUserSecrets)
+		userSec.PUT("/:ownerType/:ownerName/:key", a.setUserSecret)
+		userSec.DELETE("/:ownerType/:ownerName/:key", a.deleteUserSecret)
+	}
+
 	// --- Workflows ---
 	wf := authed.Group("/api/workflows")
 	wf.POST("/run", a.runWorkflow)
@@ -268,6 +292,10 @@ func (a *API) SetupRouter() *gin.Engine {
 	myApps.POST("/:id/prompts", a.addStorePrompt)
 	myApps.PUT("/:id/prompts/:name", a.updateStorePrompt)
 	myApps.DELETE("/:id/prompts/:name", a.deleteStorePrompt)
+
+	// Revision history.
+	myApps.GET("/:id/revisions/:type/:entityName", a.listRevisions)
+	myApps.POST("/:id/revisions/:type/:entityName/revert/:rev", a.revertRevision)
 
 	return r
 }

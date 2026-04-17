@@ -52,9 +52,12 @@ function renderField(
   value: unknown,
   setValue: (name: string, value: unknown) => void,
 ) {
-  // String with options -> select dropdown
-  if (def.type === "string" && "options" in def && Array.isArray((def as Record<string, unknown>).options)) {
-    const options = (def as Record<string, unknown>).options as string[]
+  // Any param with options -> select dropdown (handles type "string", "enum", or anything with options)
+  if (def.options && Array.isArray(def.options) && def.options.length > 0) {
+    // Normalize options: support both string[] and {value, label}[]
+    const opts = def.options.map((opt: string | { value: string; label: string }) =>
+      typeof opt === "string" ? { value: opt, label: opt } : opt
+    )
     return (
       <Select
         value={String(value ?? "")}
@@ -64,13 +67,15 @@ function renderField(
           <SelectValue placeholder={`Select ${name}...`} />
         </SelectTrigger>
         <SelectContent>
-          {options.map((opt) => (
-            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+          {opts.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
           ))}
         </SelectContent>
       </Select>
     )
   }
+
+  // type "enum" without options — fall through to text input (shouldn't happen, but safe)
 
   // Boolean -> select true/false (simple approach without a Switch component dependency)
   if (def.type === "boolean") {

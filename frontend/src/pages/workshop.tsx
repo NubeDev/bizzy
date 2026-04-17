@@ -132,7 +132,8 @@ function AppWorkbench({ appId }: { appId: string }) {
 
   const tools = app.tools || []
   const activeTool = tools.find((t) => t.name === activeToolName) || tools[0] || null
-  const allowedHosts = app.permissions?.allowedHosts || []
+  // For testing, fall back to ["*"] (allow all) when the app has no hosts configured.
+  const allowedHosts = app.permissions?.allowedHosts?.length ? app.permissions.allowedHosts : ["*"]
 
   const settings: Record<string, string> = {}
   const secrets: Record<string, string> = {}

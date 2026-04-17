@@ -35,10 +35,11 @@ type StoreApp struct {
 	Visibility Visibility  `json:"visibility"`
 
 	// Content.
-	Permissions Permissions  `json:"permissions" gorm:"serializer:json"`
-	Settings    []SettingDef `json:"settings" gorm:"serializer:json"`
-	Tools       []StoreTool  `json:"tools" gorm:"serializer:json"`
-	Prompts     []StorePrompt `json:"prompts" gorm:"serializer:json"`
+	Permissions  Permissions    `json:"permissions" gorm:"serializer:json"`
+	Settings     []SettingDef   `json:"settings" gorm:"serializer:json"`
+	Tools        []StoreTool    `json:"tools" gorm:"serializer:json"`
+	Prompts      []StorePrompt  `json:"prompts" gorm:"serializer:json"`
+	UIComponents []UIComponent  `json:"uiComponents,omitempty" gorm:"serializer:json"`
 
 	// Stats.
 	InstallCount   int     `json:"installCount"`
@@ -80,9 +81,10 @@ type StoreTool struct {
 
 // ToolParam describes a single tool parameter.
 type ToolParam struct {
-	Type        string `json:"type"`
-	Required    bool   `json:"required"`
-	Description string `json:"description"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	Description string   `json:"description"`
+	Options     []string `json:"options,omitempty"`
 }
 
 // StorePrompt is an inline prompt definition stored in the database.
@@ -91,6 +93,13 @@ type StorePrompt struct {
 	Description string           `json:"description"`
 	Arguments   []PromptArgument `json:"arguments,omitempty"`
 	Body        string           `json:"body"`
+}
+
+// UIComponent is a client-side React component stored in the database.
+// Rendered in the browser via LivePreview (sucrase + shadcn).
+type UIComponent struct {
+	Name string `json:"name"`
+	Code string `json:"code"`
 }
 
 // PromptArgument describes a single prompt argument.

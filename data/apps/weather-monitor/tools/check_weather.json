@@ -1,0 +1,12 @@
+{
+  "name": "check_weather",
+  "description": "Get current weather conditions for a city. Returns temperature, humidity, wind, visibility, and more.",
+  "toolClass": "read-only",
+  "params": {
+    "city": {
+      "type": "string",
+      "required": true,
+      "description": "City name, optionally with country code (e.g. 'London,UK' or 'Tokyo')"
+    }
+  }
+}

@@ -18,6 +18,7 @@ function App() {
         <Route path="/my-apps" element={<MyAppsPage />} />
         <Route path="/my-apps/create" element={<CreateAppPage />} />
         <Route path="/my-apps/:id/edit" element={<AppEditorPage />} />
+        <Route path="/my-apps/:id/builder" element={<CreateAppPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/my-apps/:id/workshop" element={<WorkshopPage />} />
       </Route>

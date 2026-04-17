@@ -3,9 +3,12 @@ package apps
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/NubeDev/bizzy/pkg/toolname"
 )
 
 // ToolManifest is parsed from a tool.json file alongside a .js script.
@@ -70,6 +73,9 @@ func LoadToolManifests(app *App) ([]ToolManifest, error) {
 
 		if m.Name == "" {
 			m.Name = baseName
+		}
+		if err := toolname.Validate(m.Name, m.Mode); err != nil {
+			log.Printf("[apps] warning: %s/tools/%s: %v", app.Name, e.Name(), err)
 		}
 		if m.ToolClass == "" {
 			m.ToolClass = app.Permissions.DefaultToolClass

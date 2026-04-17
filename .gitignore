@@ -57,3 +57,6 @@ data/sessions.json
 data/bizzy.db-shm
 data/bizzy.db-wal
 data/nats/
+plugins/github-plugin/bizzy-github-plugin
+data/bizzy.db-shm
+data/bizzy.db-wal

@@ -13,6 +13,8 @@ import (
 
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/revision"
+	"github.com/NubeDev/bizzy/pkg/toolname"
 	"github.com/gin-gonic/gin"
 )
 
@@ -447,16 +449,17 @@ func (a *API) updateStoreApp(c *gin.Context) {
 	}
 
 	var req struct {
-		DisplayName *string             `json:"displayName"`
-		Description *string             `json:"description"`
-		LongDesc    *string             `json:"longDescription"`
-		Version     *string             `json:"version"`
-		Icon        *string             `json:"icon"`
-		Color       *string             `json:"color"`
-		Category    *string             `json:"category"`
-		Tags        []string            `json:"tags"`
-		Permissions *models.Permissions `json:"permissions"`
-		Settings    []models.SettingDef `json:"settings"`
+		DisplayName  *string               `json:"displayName"`
+		Description  *string               `json:"description"`
+		LongDesc     *string               `json:"longDescription"`
+		Version      *string               `json:"version"`
+		Icon         *string               `json:"icon"`
+		Color        *string               `json:"color"`
+		Category     *string               `json:"category"`
+		Tags         []string              `json:"tags"`
+		Permissions  *models.Permissions   `json:"permissions"`
+		Settings     []models.SettingDef   `json:"settings"`
+		UIComponents []models.UIComponent  `json:"uiComponents"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -473,6 +476,7 @@ func (a *API) updateStoreApp(c *gin.Context) {
 	if req.Tags != nil { app.Tags = req.Tags }
 	if req.Permissions != nil { app.Permissions = *req.Permissions }
 	if req.Settings != nil { app.Settings = req.Settings }
+	if req.UIComponents != nil { app.UIComponents = req.UIComponents }
 	app.UpdatedAt = time.Now().UTC()
 
 	if err := a.DB.Save(&app).Error; err != nil {
@@ -572,6 +576,7 @@ func (a *API) addStoreTool(c *gin.Context) {
 	if err := a.DB.First(&app, "id = ? AND author_id = ?", id, user.ID).Error; err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "app not found"}); return }
 	var tool models.StoreTool
 	if err := c.ShouldBindJSON(&tool); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return }
+	if err := toolname.Validate(tool.Name, tool.Mode); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return }
 	for _, t := range app.Tools { if t.Name == tool.Name { c.JSON(http.StatusConflict, gin.H{"error": "tool already exists: " + tool.Name}); return } }
 	app.Tools = append(app.Tools, tool)
 	app.UpdatedAt = time.Now().UTC()
@@ -588,8 +593,19 @@ func (a *API) updateStoreTool(c *gin.Context) {
 	if err := a.DB.First(&app, "id = ? AND author_id = ?", id, user.ID).Error; err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "app not found"}); return }
 	var tool models.StoreTool
 	if err := c.ShouldBindJSON(&tool); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return }
+	if err := toolname.Validate(toolName, tool.Mode); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return }
 	found := false
-	for i, t := range app.Tools { if t.Name == toolName { tool.Name = toolName; app.Tools[i] = tool; found = true; break } }
+	for i, t := range app.Tools {
+		if t.Name == toolName {
+			// Save revision of the old version before overwriting.
+			if a.Revisions != nil {
+				summary := c.GetHeader("X-Change-Summary")
+				if summary == "" { summary = "manual edit" }
+				_ = a.Revisions.Save("tool", revision.EntityKey(id, toolName), user.ID, summary, t)
+			}
+			tool.Name = toolName; app.Tools[i] = tool; found = true; break
+		}
+	}
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "tool not found: " + toolName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
@@ -604,7 +620,15 @@ func (a *API) deleteStoreTool(c *gin.Context) {
 	var app models.StoreApp
 	if err := a.DB.First(&app, "id = ? AND author_id = ?", id, user.ID).Error; err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "app not found"}); return }
 	found := false
-	for i, t := range app.Tools { if t.Name == toolName { app.Tools = append(app.Tools[:i], app.Tools[i+1:]...); found = true; break } }
+	for i, t := range app.Tools {
+		if t.Name == toolName {
+			if a.Revisions != nil {
+				_ = a.Revisions.Save("tool", revision.EntityKey(id, toolName), user.ID, "deleted", t)
+			}
+			app.Tools = append(app.Tools[:i], app.Tools[i+1:]...)
+			found = true; break
+		}
+	}
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "tool not found: " + toolName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
@@ -639,7 +663,16 @@ func (a *API) updateStorePrompt(c *gin.Context) {
 	var prompt models.StorePrompt
 	if err := c.ShouldBindJSON(&prompt); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return }
 	found := false
-	for i, p := range app.Prompts { if p.Name == promptName { prompt.Name = promptName; app.Prompts[i] = prompt; found = true; break } }
+	for i, p := range app.Prompts {
+		if p.Name == promptName {
+			if a.Revisions != nil {
+				summary := c.GetHeader("X-Change-Summary")
+				if summary == "" { summary = "manual edit" }
+				_ = a.Revisions.Save("prompt", revision.EntityKey(id, promptName), user.ID, summary, p)
+			}
+			prompt.Name = promptName; app.Prompts[i] = prompt; found = true; break
+		}
+	}
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "prompt not found: " + promptName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
@@ -654,7 +687,15 @@ func (a *API) deleteStorePrompt(c *gin.Context) {
 	var app models.StoreApp
 	if err := a.DB.First(&app, "id = ? AND author_id = ?", id, user.ID).Error; err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "app not found"}); return }
 	found := false
-	for i, p := range app.Prompts { if p.Name == promptName { app.Prompts = append(app.Prompts[:i], app.Prompts[i+1:]...); found = true; break } }
+	for i, p := range app.Prompts {
+		if p.Name == promptName {
+			if a.Revisions != nil {
+				_ = a.Revisions.Save("prompt", revision.EntityKey(id, promptName), user.ID, "deleted", p)
+			}
+			app.Prompts = append(app.Prompts[:i], app.Prompts[i+1:]...)
+			found = true; break
+		}
+	}
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "prompt not found: " + promptName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)

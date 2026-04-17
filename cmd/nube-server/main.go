@@ -14,6 +14,8 @@ import (
 	"github.com/NubeDev/bizzy/pkg/database"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/revision"
+	"github.com/NubeDev/bizzy/pkg/secrets"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 )
@@ -90,6 +92,13 @@ func main() {
 		AppRegistry: registry,
 	}
 
+	// Encrypted secrets store.
+	secretKey, err := secrets.LoadOrCreateKey(dataDir)
+	if err != nil {
+		log.Fatalf("failed to load secret key: %v", err)
+	}
+	secretStore := secrets.NewStore(db, secretKey)
+
 	a := &api.API{
 		DB:            db,
 		AppRegistry:   registry,
@@ -100,6 +109,8 @@ func main() {
 		WorkflowStore: wfStore,
 		AgentSvc:      agentSvc,
 		ToolSvc:       toolSvc,
+		Secrets:       secretStore,
+		Revisions:     revision.NewStore(db),
 	}
 
 	// Wire up the workflow engine (uses services, not the API directly).

@@ -20,12 +20,14 @@ type Bus struct {
 }
 
 // New starts an embedded NATS server with JetStream persistence.
-// Data is stored under dataDir/nats/. No external TCP listener — in-process only.
+// Data is stored under dataDir/nats/. Listens on 127.0.0.1:4222 so
+// external plugin processes can connect.
 func New(dataDir string) (*Bus, error) {
 	opts := &server.Options{
-		DontListen: true, // no external TCP — in-process only
-		StoreDir:   filepath.Join(dataDir, "nats"),
-		JetStream:  true,
+		Host:      "127.0.0.1",
+		Port:      4222,
+		StoreDir:  filepath.Join(dataDir, "nats"),
+		JetStream: true,
 	}
 
 	srv, err := server.NewServer(opts)

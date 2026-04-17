@@ -5,7 +5,8 @@
 // adapters, or event handlers. This package handles the full protocol
 // lifecycle so you can focus on your business logic.
 //
-// Protocol version is locked to [version.PluginProtocol] at compile time.
+// This package has no dependencies on the bizzy server — only nats.go.
+// External plugin projects can import it without pulling in the server.
 //
 // # Quick start (tools plugin)
 //
@@ -49,8 +50,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NubeDev/bizzy/pkg/plugin"
-	"github.com/NubeDev/bizzy/pkg/version"
 	"github.com/nats-io/nats.go"
 )
 
@@ -130,9 +129,9 @@ type Plugin struct {
 	adapter   *Adapter
 	handlers  []HandlerSubscription
 
-	natsURL       string
-	heartbeatSec  int
-	logger        *log.Logger
+	natsURL      string
+	heartbeatSec int
+	logger       *log.Logger
 }
 
 // NewPlugin creates a new plugin. Name must be lowercase alphanumeric
@@ -302,47 +301,47 @@ func (p *Plugin) validate() error {
 	return nil
 }
 
-func (p *Plugin) services() []plugin.ServiceType {
-	var svc []plugin.ServiceType
+func (p *Plugin) services() []string {
+	var svc []string
 	if len(p.tools) > 0 {
-		svc = append(svc, plugin.ServiceTools)
+		svc = append(svc, svcTools)
 	}
 	if len(p.prompts) > 0 {
-		svc = append(svc, plugin.ServicePrompts)
+		svc = append(svc, svcPrompts)
 	}
 	if len(p.workflows) > 0 {
-		svc = append(svc, plugin.ServiceWorkflows)
+		svc = append(svc, svcWorkflows)
 	}
 	if p.adapter != nil {
-		svc = append(svc, plugin.ServiceAdapter)
+		svc = append(svc, svcAdapter)
 	}
 	if len(p.handlers) > 0 {
-		svc = append(svc, plugin.ServiceHandler)
+		svc = append(svc, svcHandler)
 	}
 	return svc
 }
 
-func (p *Plugin) buildManifest() plugin.RegisterRequest {
-	var tools []plugin.ToolSpec
+func (p *Plugin) buildManifest() registerRequest {
+	var tools []toolSpec
 	for _, t := range p.tools {
-		tools = append(tools, plugin.ToolSpec{
+		tools = append(tools, toolSpec{
 			Name:        t.Name,
 			Description: t.Description,
 			Parameters:  t.Parameters,
 		})
 	}
 
-	var prompts []plugin.PromptSpec
+	var prompts []promptSpec
 	for _, pr := range p.prompts {
-		var args []plugin.PromptArg
+		var args []promptArg
 		for _, a := range pr.Arguments {
-			args = append(args, plugin.PromptArg{
+			args = append(args, promptArg{
 				Name:        a.Name,
 				Description: a.Description,
 				Required:    a.Required,
 			})
 		}
-		prompts = append(prompts, plugin.PromptSpec{
+		prompts = append(prompts, promptSpec{
 			Name:        pr.Name,
 			Description: pr.Description,
 			Template:    pr.Template,
@@ -350,45 +349,43 @@ func (p *Plugin) buildManifest() plugin.RegisterRequest {
 		})
 	}
 
-	var workflows []plugin.WorkflowSpec
+	var workflows []workflowSpec
 	for _, w := range p.workflows {
-		var stages []plugin.StageSpec
+		var stages []stageSpec
 		for _, s := range w.Stages {
-			stages = append(stages, plugin.StageSpec{
+			stages = append(stages, stageSpec{
 				Name:   s.Name,
 				Tool:   s.Tool,
 				Type:   s.Type,
 				Prompt: s.Prompt,
 			})
 		}
-		workflows = append(workflows, plugin.WorkflowSpec{
+		workflows = append(workflows, workflowSpec{
 			Name:        w.Name,
 			Description: w.Description,
 			Stages:      stages,
 		})
 	}
 
-	var adapter *plugin.AdapterSpec
+	var adapter *adapterSpec
 	if p.adapter != nil {
-		adapter = &plugin.AdapterSpec{
+		adapter = &adapterSpec{
 			Channel:     p.adapter.Channel,
 			ParseConfig: p.adapter.ParseConfig,
 		}
 	}
 
-	return plugin.RegisterRequest{
-		APIVersion: version.PluginProtocol,
-		Manifest: plugin.Manifest{
-			Name:        p.name,
-			Version:     p.ver,
-			Description: p.description,
-			Services:    p.services(),
-			Tools:       tools,
-			Prompts:     prompts,
-			Workflows:   workflows,
-			Adapter:     adapter,
-			Preamble:    p.preamble,
-		},
+	return registerRequest{
+		APIVersion:  ProtocolVersion,
+		Name:        p.name,
+		Version:     p.ver,
+		Description: p.description,
+		Services:    p.services(),
+		Tools:       tools,
+		Prompts:     prompts,
+		Workflows:   workflows,
+		Adapter:     adapter,
+		Preamble:    p.preamble,
 	}
 }
 
@@ -397,11 +394,11 @@ func (p *Plugin) register(nc *nats.Conn) error {
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
-	msg, err := nc.Request(plugin.SubjectRegister, payload, 10*time.Second)
+	msg, err := nc.Request(subjectRegister, payload, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("nats request: %w", err)
 	}
-	var reply plugin.RegisterResponse
+	var reply registerResponse
 	if err := json.Unmarshal(msg.Data, &reply); err != nil {
 		return fmt.Errorf("parse reply: %w", err)
 	}
@@ -409,14 +406,13 @@ func (p *Plugin) register(nc *nats.Conn) error {
 		return fmt.Errorf("rejected: %s", reply.Error)
 	}
 	p.logger.Printf("registered (v%s, protocol=%s, tools=%d, reloaded=%v)",
-		p.ver, version.PluginProtocol, reply.ToolsRegistered, reply.Reloaded)
+		p.ver, ProtocolVersion, reply.ToolsRegistered, reply.Reloaded)
 	return nil
 }
 
 func (p *Plugin) subscribe(nc *nats.Conn) error {
-	// Tool calls — queue group for load balancing across instances.
 	if len(p.tools) > 0 {
-		subject := fmt.Sprintf("tool.call.%s.*", p.name)
+		subject := subjectToolCallPfx + p.name + ".*"
 		_, err := nc.QueueSubscribe(subject, p.name, func(msg *nats.Msg) {
 			go p.dispatchTool(msg)
 		})
@@ -425,7 +421,6 @@ func (p *Plugin) subscribe(nc *nats.Conn) error {
 		}
 	}
 
-	// Handler subscriptions — plugin-managed NATS subscriptions.
 	for _, h := range p.handlers {
 		h := h
 		var err error
@@ -448,34 +443,34 @@ func (p *Plugin) subscribe(nc *nats.Conn) error {
 func (p *Plugin) heartbeat(nc *nats.Conn) {
 	ticker := time.NewTicker(time.Duration(p.heartbeatSec) * time.Second)
 	defer ticker.Stop()
-	hb, _ := json.Marshal(plugin.HealthMessage{
-		APIVersion: version.PluginProtocol,
+	hb, _ := json.Marshal(healthMessage{
+		APIVersion: ProtocolVersion,
 		Status:     "ok",
 	})
-	subject := plugin.SubjectHealthPrefix + p.name
+	subject := subjectHealthPfx + p.name
 	for range ticker.C {
 		nc.Publish(subject, hb)
 	}
 }
 
 func (p *Plugin) deregister(nc *nats.Conn) {
-	data, _ := json.Marshal(plugin.DeregisterRequest{
-		APIVersion: version.PluginProtocol,
+	data, _ := json.Marshal(deregisterRequest{
+		APIVersion: ProtocolVersion,
 		Name:       p.name,
 	})
-	nc.Publish(plugin.SubjectDeregister, data)
+	nc.Publish(subjectDeregister, data)
 	nc.Flush()
 	p.logger.Printf("deregistered, exiting")
 }
 
 func (p *Plugin) dispatchTool(msg *nats.Msg) {
-	var req plugin.ToolCallRequest
+	var req toolCallRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		p.respondErr(msg, "invalid request payload")
 		return
 	}
 
-	prefix := fmt.Sprintf("tool.call.%s.", p.name)
+	prefix := subjectToolCallPfx + p.name + "."
 	toolName := msg.Subject[len(prefix):]
 
 	t, ok := p.tools[toolName]
@@ -490,12 +485,12 @@ func (p *Plugin) dispatchTool(msg *nats.Msg) {
 		return
 	}
 
-	resp, _ := json.Marshal(plugin.ToolCallResponse{Result: result})
+	resp, _ := json.Marshal(toolCallResponse{Result: result})
 	msg.Respond(resp)
 }
 
 func (p *Plugin) respondErr(msg *nats.Msg, errMsg string) {
-	resp, _ := json.Marshal(plugin.ToolCallResponse{Error: errMsg})
+	resp, _ := json.Marshal(toolCallResponse{Error: errMsg})
 	msg.Respond(resp)
 }
 

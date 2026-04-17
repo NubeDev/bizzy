@@ -29,6 +29,8 @@ var allModels = []any{
 	&models.AdapterConfig{},
 	&models.NotifyPrefs{},
 	&models.Plugin{},
+	&models.Revision{},
+	&models.Secret{},
 }
 
 // Open creates (or opens) a SQLite database inside dataDir, runs auto-migration,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useParams, Link } from "react-router-dom"
-import { ArrowLeft, Plus, Trash2, Check, Loader2, Save, Globe, Sparkles, FlaskConical, Eye } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Check, Loader2, Save, Globe, Sparkles, FlaskConical } from "lucide-react"
 import {
   useMyApp, useUpdateApp, usePublishApp,
   useAddTool, useDeleteTool, useUpdateTool,
@@ -8,7 +8,7 @@ import {
 } from "@/hooks/use-my-apps"
 import { VisibilityBadge } from "@/components/store/visibility-badge"
 import { AIWorkshop } from "@/components/store/ai-workshop"
-import { AppVisualBuilder } from "@/components/store/app-visual-builder"
+import { ToolList } from "@/components/shared/tool-list"
 import { ToolWorkbench } from "@/components/workshop/tool-workbench"
 import { categoryLabel } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { StoreTool, StorePrompt, StoreApp } from "@/lib/types"
+import type { StorePrompt, StoreApp } from "@/lib/types"
 
 const categories = [
   "iot-devices", "analytics", "devops", "marketing",
@@ -46,11 +46,6 @@ export function AppEditorPage() {
   const [draft, setDraft] = useState<Partial<StoreApp>>({})
   const [dirty, setDirty] = useState(false)
 
-  const [showNewTool, setShowNewTool] = useState(false)
-  const [newTool, setNewTool] = useState<StoreTool>({
-    name: "", description: "", toolClass: "read-only", params: {},
-    script: '// Tool script\nfunction handle(params) {\n  return { result: "hello" };\n}\n',
-  })
 
   const [showNewPrompt, setShowNewPrompt] = useState(false)
   const [newPrompt, setNewPrompt] = useState<StorePrompt>({ name: "", description: "", body: "" })
@@ -92,16 +87,6 @@ export function AppEditorPage() {
     await publishMutation.mutateAsync(app.id)
   }
 
-  const handleAddTool = async () => {
-    if (!newTool.name) return
-    await addToolMutation.mutateAsync({ appId: app.id, tool: newTool })
-    setNewTool({
-      name: "", description: "", toolClass: "read-only", params: {},
-      script: '// Tool script\nfunction handle(params) {\n  return { result: "hello" };\n}\n',
-    })
-    setShowNewTool(false)
-  }
-
   const handleAddPrompt = async () => {
     if (!newPrompt.name) return
     await addPromptMutation.mutateAsync({ appId: app.id, prompt: newPrompt })
@@ -139,19 +124,23 @@ export function AppEditorPage() {
             </div>
           </div>
         </div>
-        {dirty && (
-          <Button onClick={handleSave} disabled={updateMutation.isPending} className="rounded-none font-mono text-xs uppercase tracking-wider">
-            <Save size={14} className="mr-1.5" />
-            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild className="rounded-none font-mono text-xs">
+            <Link to={`/my-apps/${app.id}/builder`}>Open in Builder</Link>
           </Button>
-        )}
+          {dirty && (
+            <Button onClick={handleSave} disabled={updateMutation.isPending} className="rounded-none font-mono text-xs uppercase tracking-wider">
+              <Save size={14} className="mr-1.5" />
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="ai">
         <TabsList className="bg-transparent border-b border-border/30 rounded-none w-full justify-start gap-0 p-0 h-auto">
           <TabsTrigger value="ai" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><Sparkles size={14} className="mr-1.5" />AI Workshop</TabsTrigger>
-          <TabsTrigger value="visual" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><Eye size={14} className="mr-1.5" />Visual Builder</TabsTrigger>
           <TabsTrigger value="workshop" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><FlaskConical size={14} className="mr-1.5" />Tool Workshop</TabsTrigger>
           <TabsTrigger value="details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Details</TabsTrigger>
           <TabsTrigger value="tools" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Tools ({app.tools?.length || 0})</TabsTrigger>
@@ -163,12 +152,7 @@ export function AppEditorPage() {
 
         {/* AI Workshop tab */}
         <TabsContent value="ai" className="mt-4">
-          <AIWorkshop appId={app.id} appName={app.displayName} appDescription={app.description} />
-        </TabsContent>
-
-        {/* Visual Builder tab — redesign tool UIs with AI */}
-        <TabsContent value="visual" className="mt-4">
-          <AppVisualBuilder app={app} />
+          <AIWorkshop app={app} />
         </TabsContent>
 
         {/* Tool Workshop tab — inline workbench for testing tools */}
@@ -229,76 +213,15 @@ export function AppEditorPage() {
         </TabsContent>
 
         {/* Tools tab */}
-        <TabsContent value="tools" className="mt-6 space-y-3">
-          <div className="flex justify-end">
-            <Button onClick={() => setShowNewTool(true)} size="sm" className="rounded-none font-mono text-xs uppercase tracking-wider">
-              <Plus size={14} className="mr-1" /> Add Tool
-            </Button>
-          </div>
-
-          {showNewTool && (
-            <div className="rounded-none border border-border bg-accent/30 p-5 space-y-4">
-              <h3 className="text-sm font-mono font-medium">New Tool</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Name</Label>
-                    <Input
-                      value={newTool.name}
-                      onChange={(e) => setNewTool({ ...newTool, name: e.target.value })}
-                      placeholder="check_status"
-                      className="font-mono rounded-none bg-background/60 border-border"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Class</Label>
-                    <Select value={newTool.toolClass} onValueChange={(v) => setNewTool({ ...newTool, toolClass: v })}>
-                      <SelectTrigger className="rounded-none bg-background/60 border-border"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="read-only">read-only</SelectItem>
-                        <SelectItem value="read-write">read-write</SelectItem>
-                        <SelectItem value="destructive">destructive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Description</Label>
-                  <Input
-                    value={newTool.description}
-                    onChange={(e) => setNewTool({ ...newTool, description: e.target.value })}
-                    className="rounded-none bg-background/60 border-border"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Script (JavaScript)</Label>
-                  <Textarea
-                    value={newTool.script}
-                    onChange={(e) => setNewTool({ ...newTool, script: e.target.value })}
-                    rows={10}
-                    className="font-mono text-sm rounded-none bg-background/60 border-border"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleAddTool} disabled={!newTool.name || addToolMutation.isPending} size="sm" className="rounded-none font-mono text-xs uppercase tracking-wider">
-                    Add Tool
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowNewTool(false)} className="rounded-none">Cancel</Button>
-                </div>
-            </div>
-          )}
-
-          {app.tools?.map((tool) => (
-            <ToolCard
-              key={tool.name}
-              tool={tool}
-              onUpdate={(t) => updateToolMutation.mutate({ appId: app.id, name: tool.name, tool: t })}
-              onDelete={() => deleteToolMutation.mutate({ appId: app.id, name: tool.name })}
-            />
-          ))}
-
-          {!app.tools?.length && !showNewTool && (
-            <p className="text-sm text-muted-foreground text-center py-12">No tools yet. Add one to get started.</p>
-          )}
+        <TabsContent value="tools" className="mt-6">
+          <ToolList
+            appId={app.id}
+            tools={app.tools || []}
+            onAdd={(tool) => addToolMutation.mutate({ appId: app.id, tool })}
+            onUpdate={(name, tool, summary) => updateToolMutation.mutate({ appId: app.id, name, tool, changeSummary: summary })}
+            onDelete={(name) => deleteToolMutation.mutate({ appId: app.id, name })}
+            addPending={addToolMutation.isPending}
+          />
         </TabsContent>
 
         {/* Prompts tab */}
@@ -454,42 +377,6 @@ export function AppEditorPage() {
 
 // --- Sub-components ---
 
-function ToolCard({ tool, onUpdate, onDelete }: {
-  tool: StoreTool; onUpdate: (t: StoreTool) => void; onDelete: () => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className="rounded-none border border-border bg-accent/30 p-4">
-        <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
-          <div className="flex items-center gap-2">
-            <code className="text-sm font-medium font-mono">{tool.name}</code>
-            <Badge variant="secondary" className="text-[10px] rounded-none font-mono">{tool.toolClass}</Badge>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 hover:text-destructive rounded-none"
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
-          >
-            <Trash2 size={14} />
-          </Button>
-        </div>
-        {expanded && (
-          <div className="mt-3 space-y-2">
-            <p className="text-xs text-muted-foreground">{tool.description}</p>
-            <Textarea
-              value={tool.script}
-              onChange={(e) => onUpdate({ ...tool, script: e.target.value })}
-              rows={8}
-              className="font-mono text-xs rounded-none bg-background/60 border-border"
-            />
-          </div>
-        )}
-    </div>
-  )
-}
-
 function PromptCard({ prompt, onUpdate, onDelete }: {
   prompt: StorePrompt; onUpdate: (p: StorePrompt) => void; onDelete: () => void
 }) {
@@ -528,7 +415,9 @@ function InlineWorkshop({ app }: { app: StoreApp }) {
   const tools = app.tools || []
   const activeTool = tools.find((t) => t.name === activeToolName) || tools[0] || null
 
-  const allowedHosts = app.permissions?.allowedHosts || []
+  // In the editor, always allow all hosts for testing — it's a dev sandbox.
+  // The app's actual allowedHosts are enforced at runtime, not during testing.
+  const allowedHosts = app.permissions?.allowedHosts?.length ? app.permissions.allowedHosts : ["*"]
   const settings: Record<string, string> = {}
   const secrets: Record<string, string> = {}
   for (const def of app.settings || []) {
