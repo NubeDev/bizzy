@@ -26,6 +26,8 @@ var allModels = []any{
 	&models.AppReview{},
 	&models.WorkflowRun{},
 	&models.ProviderConfig{},
+	&models.AdapterConfig{},
+	&models.NotifyPrefs{},
 }
 
 // Open creates (or opens) a SQLite database inside dataDir, runs auto-migration,

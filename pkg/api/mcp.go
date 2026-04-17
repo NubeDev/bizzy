@@ -28,7 +28,7 @@ func (a *API) buildMCPHandler() http.Handler {
 		var installs []models.AppInstall
 		a.DB.Where("user_id = ? AND enabled = ?", user.ID, true).Find(&installs)
 
-		// Build a per-user MCP server with only their tools/prompts.
-		return a.MCPFactory.BuildServer(installs)
+		// Build a per-user MCP server with only their tools/prompts + platform tools.
+		return a.MCPFactory.BuildServer(installs, a.DB, user.ID)
 	}, nil)
 }

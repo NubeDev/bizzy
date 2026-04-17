@@ -54,3 +54,5 @@ apps/nube_agent/windows/flutter/ephemeral/
 *.iml
 data/sessions.json
 data/sessions.json
+data/bizzy.db-shm
+data/bizzy.db-wal

@@ -21,6 +21,12 @@ type PromptRunner interface {
 	RunPrompt(ctx context.Context, userID, prompt string) (string, error)
 }
 
+// EventPublisher publishes lifecycle events to the event bus.
+// Optional — if nil, events are silently skipped.
+type EventPublisher interface {
+	Publish(topic string, data any) error
+}
+
 // Runner executes workflow runs. It manages active runs in memory and persists
 // state to the database.
 type Runner struct {
@@ -30,6 +36,7 @@ type Runner struct {
 	workflows  *Store
 	tools      ToolCaller
 	prompts    PromptRunner
+	bus        EventPublisher // optional event bus
 }
 
 // activeRun holds the in-memory state for a running workflow, including the
@@ -57,6 +64,18 @@ func NewRunner(
 		workflows: workflows,
 		tools:     tools,
 		prompts:   prompts,
+	}
+}
+
+// SetBus attaches an event publisher for lifecycle events.
+func (r *Runner) SetBus(bus EventPublisher) {
+	r.bus = bus
+}
+
+// publish sends an event if a bus is configured.
+func (r *Runner) publish(topic string, data any) {
+	if r.bus != nil {
+		r.bus.Publish(topic, data)
 	}
 }
 
@@ -123,6 +142,14 @@ func (r *Runner) Start(run models.WorkflowRun) (*models.WorkflowRun, error) {
 	r.mu.Unlock()
 
 	go r.execute(ctx, run.ID, def, ar)
+
+	r.publish(TopicStarted, RunEvent{
+		RunID:    run.ID,
+		AppName:  run.AppName,
+		Workflow: run.Workflow,
+		UserID:   run.UserID,
+		Status:   "running",
+	})
 
 	return &run, nil
 }
@@ -201,6 +228,14 @@ func (r *Runner) Cancel(id string) error {
 	delete(r.active, id)
 	r.mu.Unlock()
 
+	r.publish(TopicCancelled, RunEvent{
+		RunID:    run.ID,
+		AppName:  run.AppName,
+		Workflow: run.Workflow,
+		UserID:   run.UserID,
+		Status:   "cancelled",
+	})
+
 	return nil
 }
 
@@ -232,6 +267,15 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 		run.Stages[i].StartedAt = &now
 		run.Version++
 		r.db.Save(&run)
+
+		r.publish(TopicStageStarted, RunEvent{
+			RunID:    run.ID,
+			AppName:  run.AppName,
+			Workflow: run.Workflow,
+			UserID:   run.UserID,
+			Stage:    stageDef.Name,
+			Status:   "running",
+		})
 
 		result, err := r.executeStage(ctx, &run, &stageDef, vars, ar)
 
@@ -282,6 +326,16 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 		run.Stages[i].Output = result
 		run.Version++
 
+		r.publish(TopicStageCompleted, RunEvent{
+			RunID:      run.ID,
+			AppName:    run.AppName,
+			Workflow:   run.Workflow,
+			UserID:     run.UserID,
+			Stage:      stageDef.Name,
+			Status:     "completed",
+			DurationMS: run.Stages[i].DurationMS,
+		})
+
 		// Store output as template variable.
 		if stageDef.SaveAs != "" {
 			vars[stageDef.SaveAs] = result
@@ -298,6 +352,14 @@ func (r *Runner) execute(ctx context.Context, runID string, def *WorkflowDef, ar
 	run.Version++
 	run.FinishedAt = &now
 	r.db.Save(&run)
+
+	r.publish(TopicCompleted, RunEvent{
+		RunID:    run.ID,
+		AppName:  run.AppName,
+		Workflow: run.Workflow,
+		UserID:   run.UserID,
+		Status:   "completed",
+	})
 }
 
 // executeStage runs a single stage and returns its output.
@@ -364,6 +426,16 @@ func (r *Runner) executeApproval(
 	run.Version++
 	r.db.Save(run)
 
+	r.publish(TopicWaitingApproval, RunEvent{
+		RunID:    run.ID,
+		AppName:  run.AppName,
+		Workflow: run.Workflow,
+		UserID:   run.UserID,
+		Stage:    stage.Name,
+		Status:   "waiting_approval",
+		Output:   content,
+	})
+
 	// Wait for approval.
 	select {
 	case <-ctx.Done():
@@ -372,6 +444,10 @@ func (r *Runner) executeApproval(
 		switch action.Action {
 		case "approve":
 			run.Status = models.WorkflowRunning
+			r.publish(TopicApproved, RunEvent{
+				RunID: run.ID, AppName: run.AppName, Workflow: run.Workflow,
+				UserID: run.UserID, Stage: stage.Name, Status: "approved",
+			})
 			return content, nil
 		case "reject":
 			// Inject feedback into vars for retry stages.
@@ -379,6 +455,11 @@ func (r *Runner) executeApproval(
 				vars["rejection_feedback"] = action.Feedback
 			}
 			run.Status = models.WorkflowRunning
+			r.publish(TopicRejected, RunEvent{
+				RunID: run.ID, AppName: run.AppName, Workflow: run.Workflow,
+				UserID: run.UserID, Stage: stage.Name, Status: "rejected",
+				Error: action.Feedback,
+			})
 			return nil, fmt.Errorf("rejected: %s", action.Feedback)
 		case "cancel":
 			return nil, fmt.Errorf("cancelled by user")
@@ -434,4 +515,23 @@ func (r *Runner) failRun(run *models.WorkflowRun, stageIdx int, err error) {
 	run.Version++
 	run.FinishedAt = &now
 	r.db.Save(run)
+
+	r.publish(TopicStageFailed, RunEvent{
+		RunID:   run.ID,
+		AppName: run.AppName,
+		Workflow: run.Workflow,
+		UserID:  run.UserID,
+		Stage:   run.Stages[stageIdx].Name,
+		Status:  "failed",
+		Error:   err.Error(),
+	})
+
+	r.publish(TopicFailed, RunEvent{
+		RunID:    run.ID,
+		AppName:  run.AppName,
+		Workflow: run.Workflow,
+		UserID:   run.UserID,
+		Status:   "failed",
+		Error:    err.Error(),
+	})
 }

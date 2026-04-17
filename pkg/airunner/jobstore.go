@@ -148,10 +148,27 @@ type JobView struct {
 	Result   string     `json:"result,omitempty"` // full text, only set when done
 }
 
+// EventPublisher publishes lifecycle events to the event bus.
+type EventPublisher interface {
+	Publish(topic string, data any) error
+}
+
+// JobEvent data published to the bus.
+type BusJobEvent struct {
+	JobID    string `json:"job_id"`
+	UserID   string `json:"user_id"`
+	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
+	Status   string `json:"status"`
+	Error    string `json:"error,omitempty"`
+	Result   string `json:"result,omitempty"`
+}
+
 // JobStore manages in-memory jobs with a cleanup goroutine.
 type JobStore struct {
 	mu   sync.RWMutex
 	jobs map[string]*Job
+	bus  EventPublisher // optional
 }
 
 // NewJobStore creates a job store and starts a background cleanup goroutine
@@ -160,6 +177,17 @@ func NewJobStore() *JobStore {
 	s := &JobStore{jobs: make(map[string]*Job)}
 	go s.cleanup()
 	return s
+}
+
+// SetBus attaches an event publisher for lifecycle events.
+func (s *JobStore) SetBus(bus EventPublisher) {
+	s.bus = bus
+}
+
+func (s *JobStore) publish(topic string, data any) {
+	if s.bus != nil {
+		s.bus.Publish(topic, data)
+	}
 }
 
 // Submit creates a new job and starts it in a background goroutine.
@@ -189,6 +217,10 @@ func (s *JobStore) Submit(
 	s.jobs[jobID] = j
 	s.mu.Unlock()
 
+	s.publish("job.started", BusJobEvent{
+		JobID: jobID, UserID: userID, Provider: provider, Model: model, Status: "running",
+	})
+
 	go func() {
 		result := runner.Run(ctx, cfg, sessionID, func(ev Event) {
 			j.appendEvent(ev)
@@ -198,6 +230,17 @@ func (s *JobStore) Submit(
 			status = JobStatusCancelled
 		}
 		j.finish(status, &result)
+
+		evt := BusJobEvent{
+			JobID: jobID, UserID: userID, Provider: provider, Model: model,
+			Status: string(status),
+		}
+		if status == JobStatusDone {
+			evt.Result = result.Text
+			s.publish("job.completed", evt)
+		} else {
+			s.publish("job.cancelled", evt)
+		}
 	}()
 
 	return j

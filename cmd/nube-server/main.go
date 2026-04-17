@@ -2,11 +2,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/api"
@@ -16,10 +16,11 @@ import (
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/workflow"
-	"gorm.io/gorm"
 )
 
 func main() {
+	ctx := context.Background()
+
 	dataDir := os.Getenv("NUBE_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "./data"
@@ -109,6 +110,14 @@ func main() {
 		api.NewWorkflowPromptRunner(agentSvc),
 	)
 
+	// --- Command Bus & Event Bus ---
+	cleanup, err := setupCommandBus(ctx, a, agentSvc, toolSvc, db, dataDir)
+	if err != nil {
+		log.Printf("[command-bus] failed to start NATS bus: %v (command bus disabled)", err)
+	} else {
+		defer cleanup()
+	}
+
 	// Apply saved provider config to runners (host overrides, etc.).
 	a.ApplyProviderConfig(a.ProviderConfigGet())
 
@@ -128,138 +137,4 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
-}
-
-// migrateStoreAppsToDisk writes disk files for any store app that has inline
-// content but no directory on disk yet.
-func migrateStoreAppsToDisk(db *gorm.DB, appsDir string) {
-	var all []models.StoreApp
-	db.Find(&all)
-	migrated := 0
-	for _, sa := range all {
-		appDir := filepath.Join(appsDir, sa.Name)
-		if _, err := os.Stat(filepath.Join(appDir, "app.yaml")); err == nil {
-			continue
-		}
-		if err := api.WriteStoreAppToDisk(sa, appsDir); err != nil {
-			log.Printf("[migrate] failed to migrate store app %s: %v", sa.Name, err)
-			continue
-		}
-		migrated++
-	}
-	if migrated > 0 {
-		log.Printf("[migrate] migrated %d store apps to disk", migrated)
-	}
-}
-
-// syncDiskAppsToStore creates store_apps records for any disk app that
-// doesn't have one yet (e.g. system apps shipped with the code).
-func syncDiskAppsToStore(registry *apps.Registry, db *gorm.DB) {
-	synced := 0
-	for _, app := range registry.List() {
-		var existing models.StoreApp
-		if err := db.Where("name = ?", app.Name).First(&existing).Error; err == nil {
-			continue
-		}
-
-		now := time.Now().UTC()
-		sa := models.StoreApp{
-			ID:          models.GenerateID("app-"),
-			Name:        app.Name,
-			DisplayName: app.Name,
-			Description: app.Description,
-			Version:     app.Version,
-			Category:    categoryFromTags(app.Tags),
-			Tags:        app.Tags,
-			AuthorID:    "system",
-			AuthorName:  app.Author,
-			Visibility:  models.VisibilityPublic,
-			Permissions: models.Permissions{
-				AllowedHosts:     app.Permissions.AllowedHosts,
-				DefaultToolClass: app.Permissions.DefaultToolClass,
-			},
-			Settings: convertSettings(app.Settings),
-			Tools:    []models.StoreTool{},
-			Prompts:  []models.StorePrompt{},
-			CreatedAt: now,
-			UpdatedAt: now,
-			PublishedAt: &now,
-		}
-		if sa.Tags == nil {
-			sa.Tags = []string{}
-		}
-		if sa.Permissions.AllowedHosts == nil {
-			sa.Permissions.AllowedHosts = []string{}
-		}
-		if sa.Settings == nil {
-			sa.Settings = []models.SettingDef{}
-		}
-
-		// Count tools/prompts from registry for the store record.
-		tools := registry.GetTools(app.Name)
-		for _, t := range tools {
-			sa.Tools = append(sa.Tools, models.StoreTool{
-				Name:        t.Name,
-				Description: t.Description,
-				ToolClass:   t.ToolClass,
-				Mode:        t.Mode,
-			})
-		}
-		prompts := registry.GetPrompts(app.Name)
-		for _, p := range prompts {
-			sp := models.StorePrompt{
-				Name:        p.Name,
-				Description: p.Description,
-				Body:        p.Body,
-			}
-			for _, a := range p.Arguments {
-				sp.Arguments = append(sp.Arguments, models.PromptArgument{
-					Name:        a.Name,
-					Description: a.Description,
-					Required:    a.Required,
-				})
-			}
-			sa.Prompts = append(sa.Prompts, sp)
-		}
-
-		db.Create(&sa)
-		synced++
-		log.Printf("[sync] created store record for disk app: %s", app.Name)
-	}
-	if synced > 0 {
-		log.Printf("[sync] synced %d disk apps to store", synced)
-	}
-}
-
-func categoryFromTags(tags []string) string {
-	for _, t := range tags {
-		switch t {
-		case "iot-devices", "analytics", "devops", "marketing", "design", "utilities", "integrations", "automation":
-			return t
-		}
-	}
-	return "utilities"
-}
-
-// migrateSessionProvider backfills provider="claude" on sessions that predate
-// the multi-provider fields (Phase 1a).
-func migrateSessionProvider(db *gorm.DB) {
-	result := db.Model(&models.Session{}).Where("provider = '' OR provider IS NULL").Update("provider", "claude")
-	if result.RowsAffected > 0 {
-		log.Printf("[migrate] backfilled provider=claude on %d sessions", result.RowsAffected)
-	}
-}
-
-func convertSettings(defs []apps.SettingDef) []models.SettingDef {
-	out := make([]models.SettingDef, len(defs))
-	for i, d := range defs {
-		out[i] = models.SettingDef{
-			Key:      d.Key,
-			Label:    d.Label,
-			Type:     d.Type,
-			Required: d.Required,
-			Default:  d.Default,
-		}
-	}
-	return out
 }

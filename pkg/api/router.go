@@ -2,9 +2,12 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/auth"
+	"github.com/NubeDev/bizzy/pkg/command"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
@@ -30,6 +33,10 @@ type API struct {
 	// Reusable application services (decoupled from HTTP).
 	AgentSvc *services.AgentService
 	ToolSvc  *services.ToolService
+
+	// Command bus (optional — nil if not configured).
+	CmdRouter      *command.Router
+	WebhookHandler func(http.ResponseWriter, *http.Request) // set by main if webhook adapter is enabled
 }
 
 // ProviderConfigGet loads the provider config from the database.
@@ -168,6 +175,36 @@ func (a *API) SetupRouter() *gin.Engine {
 	}
 	r.Any("/mcp", mcpGin)
 	r.Any("/mcp/*path", mcpGin)
+
+	// --- Command Bus ---
+	if a.CmdRouter != nil {
+		authed.POST("/api/command", a.handleCommand)
+		authed.GET("/api/command/help", a.handleCommandHelp)
+		authed.GET("/api/events/stream", a.handleEventStream)
+
+		// Webhook inbound endpoint.
+		if a.WebhookHandler != nil {
+			r.POST("/hooks/command", gin.WrapF(a.WebhookHandler))
+		}
+
+		// Adapter management (admin).
+		adm := admin.Group("/api/adapters")
+		adm.GET("", a.listAdapters)
+
+		// Cron management (admin).
+		cronRoutes := admin.Group("/api/cron")
+		cronRoutes.GET("", a.listCronEntries)
+		cronRoutes.POST("", a.createCronEntry)
+		cronRoutes.DELETE("/:id", a.deleteCronEntry)
+		cronRoutes.PATCH("/:id", a.toggleCronEntry)
+
+		// Notification preferences (per-user).
+		authed.GET("/api/notifications/prefs", a.getNotifyPrefs)
+		authed.PUT("/api/notifications/prefs", a.updateNotifyPrefs)
+
+		// Webhook logs (admin).
+		admin.GET("/api/webhooks/logs", a.listWebhookLogs)
+	}
 
 	// --- Workflows ---
 	wf := authed.Group("/api/workflows")

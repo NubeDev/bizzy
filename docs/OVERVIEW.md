@@ -87,7 +87,7 @@ Multiple AI backends through one interface. All providers implement `Runner.Run(
 | Provider | Type | Tool calling | System prompt | Session resume |
 |---|---|---|---|---|
 | Claude | CLI | Yes (native MCP) | Via prompt prefix | Yes |
-| Ollama | API (local) | No | Yes (system message) | No |
+| Ollama | API (local) | Yes (server-side agent loop) | Yes (system message) | No |
 | Codex | CLI | No | Via prompt prefix | No |
 | Copilot | CLI | No | Via prompt prefix | No |
 
@@ -246,4 +246,7 @@ bizzy/
 | [MULTI-APP-WORKFLOW.md](MULTI-APP-WORKFLOW.md) | Staged workflows, approval gates, failure handling |
 | [STORE.md](STORE.md) | App store, publishing, sharing, reviews |
 | [RUBIX.md](RUBIX.md) | Rubix BMS integration example |
+| [COMMAND-BUS.md](COMMAND-BUS.md) | Unified command syntax, event bus, adapters (Slack, email, cron, webhook) |
+| [PLUGIN-SYSTEM.md](PLUGIN-SYSTEM.md) | Separate-process plugins over NATS (any language, hot-reload, unload) |
+| [JOB-ENGINE.md](JOB-ENGINE.md) | Trigger-driven job library (absorbed into COMMAND-BUS) |
 | [NEW-IDEAS.md](NEW-IDEAS.md) | Planned improvements and ideas |

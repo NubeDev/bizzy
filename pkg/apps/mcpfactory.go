@@ -17,6 +17,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"gorm.io/gorm"
 )
 
 // MCPFactory builds per-user MCP servers with only the tools from their installed apps.
@@ -140,16 +141,21 @@ func (f *MCPFactory) BuildAppContext(installs []models.AppInstall) string {
 		}
 	}
 
-	if b.Len() == 0 {
-		return ""
-	}
+	// Platform tools are always available — append them to the context.
+	b.WriteString("- platform: Query your own platform data — sessions, installs, app store, and usage stats\n")
+	b.WriteString("    platform.list_sessions — List your recent AI sessions with provider, model, cost, and duration\n")
+	b.WriteString("    platform.get_session — Get full details of a specific session including the AI response\n")
+	b.WriteString("    platform.list_installs — List your installed apps and their status\n")
+	b.WriteString("    platform.search_apps — Search the app store for apps by name, description, or category\n")
+	b.WriteString("    platform.usage_stats — Get your usage summary: sessions, tokens, and cost over a time range\n")
 
 	return "[Installed Apps]\n" + b.String() + "\n"
 }
 
 // BuildServer creates an MCP server with tools scoped to the user's installed apps.
-// The registry now contains both system apps and store apps, so no store fallback is needed.
-func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {
+// Platform tools (platform.*) are always registered when db and userID are provided,
+// giving the AI read-only access to sessions, installs, app store, and usage stats.
+func (f *MCPFactory) BuildServer(installs []models.AppInstall, db *gorm.DB, userID string) *mcp.Server {
 	impl := &mcp.Implementation{Name: "nube-server", Version: "0.1.0"}
 	srv := mcp.NewServer(impl, nil)
 
@@ -170,6 +176,11 @@ func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {
 			f.registerJSTools(srv, app, install)
 		}
 		f.registerPrompts(srv, app)
+	}
+
+	// Register Go-native platform tools — always available for every user.
+	if db != nil && userID != "" {
+		registerPlatformTools(srv, userID, db)
 	}
 
 	return srv

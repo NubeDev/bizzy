@@ -249,7 +249,7 @@ Low effort, saves friction for app authors. Currently apps are created via the R
 
 ---
 
-## 8. Server-side Agent Loop for Non-Claude Providers (high priority, high effort)
+## 8. Server-side Agent Loop for Non-Claude Providers (high priority, high effort) — DONE
 
 **Problem:** Only Claude has tool-calling support via native MCP. Ollama, OpenAI, Anthropic, and Gemini users get text-only chat — they can see tools exist but the AI can't call them. This is the largest capability gap in the platform.
 
@@ -359,7 +359,7 @@ This is not part of the initial migration but becomes trivial once off JSON file
 
 ---
 
-## 10. Platform Tools — AI Access to Internal Data (medium priority, low effort)
+## 10. Platform Tools — AI Access to Internal Data (medium priority, low effort) — DONE
 
 **Problem:** The AI has tools to query external systems (Rubix, weather APIs, etc.) but can't query the platform itself. It can't answer "how many sessions did I run this week?", "which apps do I have installed?", or "show me my recent errors." The user has to leave the AI and check the dashboard.
 
@@ -480,8 +480,8 @@ platform.tool_stats        — "Show tool usage, latency, and error rates"
 | 6 | Tool call tracking | Low | High | **DONE** — `ToolCallLog` on sessions, per-tool name/duration/status/error |
 | 1 | Preamble composition | Low | High | **DONE** — `BuildAppContext()` on MCPFactory, injected via `AgentService` |
 | 9 | GORM + SQLite/PG migration | Medium | High | **DONE** — SQLite via GORM, auto-migrate, JSON import on first startup. See [DB.md](DB.md) |
-| 10 | Platform tools | Low | High | Next — DB is ready, register Go-native `platform.*` tools in MCPFactory |
-| 8 | Server-side agent loop | High | High | Next — unlocks tools for all non-Claude providers |
+| 10 | Platform tools | Low | High | **DONE** — `platform.*` Go-native tools in MCPFactory: list_sessions, get_session, list_installs, search_apps, usage_stats |
+| 8 | Server-side agent loop | High | High | **DONE** — Ollama agent loop with MCP tool calling via SDK client. Converts MCP schemas to Ollama format, max 10 steps |
 | 5 | Prompt chaining | Medium | High | Planned — high value but get execution model right |
 | 2 | Tool result caching | Medium | Medium | Phase 2 — informed by tracking data from #6 |
 | 3 | Settings/secrets hardening | Low | Medium | Phase 2 — model split exists, just finish the API/encryption |
@@ -490,4 +490,4 @@ platform.tool_stats        — "Show tool usage, latency, and error rates"
 
 **What's next:**
 
-With tracking (#6), preamble (#1), and the DB (#9) done, the two highest-impact remaining items are platform tools (#10) and the server-side agent loop (#8). Platform tools are low effort since GORM is in place — just register `platform.list_sessions`, `platform.usage_stats`, etc. as Go-native tools in MCPFactory. The agent loop is higher effort but unlocks tool calling for Ollama, OpenAI, Anthropic, and Gemini.
+With tracking (#6), preamble (#1), DB (#9), platform tools (#10), and the agent loop (#8) all done, the remaining high-impact items are prompt chaining (#5) and tool result caching (#2). Prompt chaining unlocks multi-step workflows from the CLI. Caching reduces redundant tool calls — informed by the tracking data from #6.
