@@ -108,11 +108,20 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
 
-	// Prepend memory (server + user) to the prompt.
+	// Prepend memory (server + user) and app context to the prompt.
 	prompt := req.Prompt
 	if a.Memory != nil {
 		if prefix := a.Memory.BuildPromptPrefix(user.ID); prefix != "" {
 			prompt = prefix + prompt
+		}
+	}
+	// Inject installed app/tool descriptions so the AI knows what tools are available.
+	if a.MCPFactory != nil {
+		installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
+			return ai.UserID == user.ID && ai.Enabled
+		})
+		if appCtx := a.MCPFactory.BuildAppContext(installs); appCtx != "" {
+			prompt = appCtx + prompt
 		}
 	}
 
@@ -220,6 +229,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 		InputTokens:     result.InputTokens,
 		OutputTokens:    result.OutputTokens,
 		ToolCalls:       result.ToolCalls,
+		ToolCallLog:     convertToolCallLog(result.ToolCallLog),
 		UserID:          user.ID,
 		CreatedAt:       time.Now().UTC(),
 	})
@@ -232,6 +242,25 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 func sendWSError(conn *websocket.Conn, sessionID, msg string) {
 	conn.WriteJSON(airunner.Event{Type: "error", SessionID: sessionID, Error: msg})
+}
+
+// convertToolCallLog converts airunner.ToolCallEntry to models.ToolCallEntry.
+func convertToolCallLog(entries []airunner.ToolCallEntry) []models.ToolCallEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]models.ToolCallEntry, len(entries))
+	for i, e := range entries {
+		out[i] = models.ToolCallEntry{
+			Name:        e.Name,
+			DurationMS:  e.DurationMS,
+			Status:      e.Status,
+			Error:       e.Error,
+			InputBytes:  e.InputBytes,
+			OutputBytes: e.OutputBytes,
+		}
+	}
+	return out
 }
 
 // --- Session history REST endpoints ---

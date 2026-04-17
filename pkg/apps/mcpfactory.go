@@ -81,6 +81,72 @@ func (f *MCPFactory) Rebuild() {
 	f.preloadSpecs()
 }
 
+// BuildAppContext generates a text summary of installed apps and their tools
+// for injection into AI prompts. This gives the AI awareness of what tools are
+// available and what they do, without the user having to pick an agent.
+func (f *MCPFactory) BuildAppContext(installs []models.AppInstall) string {
+	var b strings.Builder
+	toolCount := 0
+	const maxTools = 30 // cap total tool lines to control context budget
+
+	for _, install := range installs {
+		if !install.Enabled {
+			continue
+		}
+		app, ok := f.registry.Get(install.AppName)
+		if !ok {
+			continue
+		}
+
+		desc := app.Description
+		if desc == "" {
+			desc = "No description"
+		}
+		b.WriteString("- " + app.Name + ": " + desc + "\n")
+
+		// Collect tool descriptions from JS manifests.
+		if app.HasTools {
+			for _, m := range f.registry.GetTools(app.Name) {
+				if toolCount >= maxTools {
+					break
+				}
+				toolDesc := m.Description
+				if toolDesc == "" {
+					toolDesc = m.Name
+				}
+				b.WriteString("    " + app.Name + "." + m.Name + " — " + toolDesc + "\n")
+				toolCount++
+			}
+		}
+
+		// Collect tool descriptions from OpenAPI operations.
+		if app.HasOpenAPI && app.OpenAPIRemote == nil {
+			if sd, ok := f.specCache[app.Name]; ok {
+				for _, op := range sd.ops {
+					if toolCount >= maxTools {
+						break
+					}
+					opDesc := op.Summary
+					if opDesc == "" {
+						opDesc = op.Description
+					}
+					if opDesc == "" {
+						opDesc = op.OperationID
+					}
+					b.WriteString("    " + app.Name + "." + op.OperationID + " — " + opDesc + "\n")
+					toolCount++
+				}
+			}
+		}
+	}
+
+	if b.Len() == 0 {
+		return ""
+	}
+
+	return "[Installed Apps]\n" + b.String() + "\n"
+}
+
 // BuildServer creates an MCP server with tools scoped to the user's installed apps.
 // The registry now contains both system apps and store apps, so no store fallback is needed.
 func (f *MCPFactory) BuildServer(installs []models.AppInstall) *mcp.Server {

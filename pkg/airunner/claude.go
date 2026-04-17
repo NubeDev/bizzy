@@ -3,6 +3,7 @@ package airunner
 import (
 	"context"
 	"os/exec"
+	"time"
 
 	"github.com/NubeDev/bizzy/pkg/claude"
 )
@@ -19,6 +20,10 @@ func (r *ClaudeRunner) Available() bool {
 
 func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 	var toolCalls int
+	var toolCallLog []ToolCallEntry
+	var pendingTool *ToolCallEntry
+	var toolStartTime time.Time
+
 	res := claude.Run(ctx, claude.RunConfig{
 		Prompt:       cfg.Prompt,
 		ResumeID:     cfg.ResumeID,
@@ -27,7 +32,21 @@ func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 		AllowedTools: cfg.AllowedTools,
 	}, sessionID, func(ev claude.Event) {
 		if ev.Type == "tool_call" {
+			// Finish the previous tool call if one was pending.
+			if pendingTool != nil {
+				pendingTool.DurationMS = int(time.Since(toolStartTime).Milliseconds())
+				pendingTool.Status = "ok"
+				toolCallLog = append(toolCallLog, *pendingTool)
+			}
 			toolCalls++
+			pendingTool = &ToolCallEntry{Name: ev.Name}
+			toolStartTime = time.Now()
+		} else if ev.Type == "error" && pendingTool != nil {
+			pendingTool.DurationMS = int(time.Since(toolStartTime).Milliseconds())
+			pendingTool.Status = "error"
+			pendingTool.Error = ev.Error
+			toolCallLog = append(toolCallLog, *pendingTool)
+			pendingTool = nil
 		}
 		// Convert claude.Event → airunner.Event
 		onEvent(Event{
@@ -43,6 +62,13 @@ func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 		})
 	})
 
+	// Finish the last pending tool call.
+	if pendingTool != nil {
+		pendingTool.DurationMS = int(time.Since(toolStartTime).Milliseconds())
+		pendingTool.Status = "ok"
+		toolCallLog = append(toolCallLog, *pendingTool)
+	}
+
 	return RunResult{
 		Text:            res.Text,
 		Provider:        string(ProviderClaude),
@@ -50,5 +76,6 @@ func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 		DurationMS:      res.DurationMS,
 		CostUSD:         res.CostUSD,
 		ToolCalls:       toolCalls,
+		ToolCallLog:     toolCallLog,
 	}
 }

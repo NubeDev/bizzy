@@ -42,17 +42,28 @@ type Event struct {
 	CostUSD    float64 `json:"cost_usd,omitempty"`
 }
 
+// ToolCallEntry records a single tool invocation within a run.
+type ToolCallEntry struct {
+	Name        string `json:"name"`
+	DurationMS  int    `json:"duration_ms,omitempty"`
+	Status      string `json:"status"`
+	Error       string `json:"error,omitempty"`
+	InputBytes  int    `json:"input_bytes,omitempty"`
+	OutputBytes int    `json:"output_bytes,omitempty"`
+}
+
 // RunResult contains the aggregated output after a run completes.
 type RunResult struct {
-	Text            string  `json:"text"`
-	Provider        string  `json:"provider"`
-	Model           string  `json:"model,omitempty"`
-	ClaudeSessionID string  `json:"claude_session_id,omitempty"` // Claude-specific, used for --resume
-	DurationMS      int     `json:"duration_ms"`
-	CostUSD         float64 `json:"cost_usd"`
-	InputTokens     int     `json:"input_tokens,omitempty"`
-	OutputTokens    int     `json:"output_tokens,omitempty"`
-	ToolCalls       int     `json:"tool_calls,omitempty"`
+	Text            string          `json:"text"`
+	Provider        string          `json:"provider"`
+	Model           string          `json:"model,omitempty"`
+	ClaudeSessionID string          `json:"claude_session_id,omitempty"` // Claude-specific, used for --resume
+	DurationMS      int             `json:"duration_ms"`
+	CostUSD         float64         `json:"cost_usd"`
+	InputTokens     int             `json:"input_tokens,omitempty"`
+	OutputTokens    int             `json:"output_tokens,omitempty"`
+	ToolCalls       int             `json:"tool_calls,omitempty"`
+	ToolCallLog     []ToolCallEntry `json:"tool_call_log,omitempty"`
 }
 
 // Runner is the interface every AI backend must implement.
