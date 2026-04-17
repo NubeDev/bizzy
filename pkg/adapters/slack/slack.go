@@ -13,6 +13,7 @@ import (
 
 	"github.com/NubeDev/bizzy/pkg/command"
 	slackgo "github.com/slack-go/slack"
+	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
 	"gorm.io/gorm"
 )
@@ -78,10 +79,7 @@ func (s *Adapter) Start(ctx context.Context, router *command.Router) error {
 	// on msg.Data to extract workflow run IDs and reply info.
 
 	// Start Socket Mode listener.
-	socketClient := socketmode.New(
-		s.client,
-		socketmode.OptionAppLevelToken(s.appToken),
-	)
+	socketClient := socketmode.New(s.client)
 
 	go func() {
 		for evt := range socketClient.Events {
@@ -130,7 +128,7 @@ func (s *Adapter) BuildReply(info command.ReplyInfo) (command.ReplyChannel, erro
 
 // handleEventsAPI processes incoming Slack messages.
 func (s *Adapter) handleEventsAPI(ctx context.Context, evt socketmode.Event) {
-	eventsAPI, ok := evt.Data.(slackgo.EventsAPIEvent)
+	eventsAPI, ok := evt.Data.(slackevents.EventsAPIEvent)
 	if !ok {
 		return
 	}

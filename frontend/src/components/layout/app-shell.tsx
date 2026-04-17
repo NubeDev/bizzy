@@ -8,6 +8,7 @@ const navItems = [
   { label: "Chat", url: "/chat" },
   { label: "My Apps", url: "/my-apps" },
   { label: "Create", url: "/my-apps/create" },
+  { label: "Workshop", url: "/workshop" },
 ]
 
 export function AppShell() {

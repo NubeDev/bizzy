@@ -57,6 +57,7 @@ func New(dataDir string) (*Bus, error) {
 		{Name: "WORKFLOWS", Subjects: []string{"workflow.>"}, MaxAge: 7 * 24 * time.Hour},
 		{Name: "JOBS", Subjects: []string{"job.>"}, MaxAge: 24 * time.Hour},
 		{Name: "TOOLS", Subjects: []string{"tool.>"}, MaxAge: 24 * time.Hour},
+		{Name: "EXTENSIONS", Subjects: []string{"extension.>"}, MaxAge: 24 * time.Hour},
 	}
 	for _, cfg := range streams {
 		if _, err := js.AddStream(&cfg); err != nil {

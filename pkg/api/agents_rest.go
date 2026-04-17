@@ -12,10 +12,11 @@ import (
 
 // runAgentRequest is the JSON body for POST /api/agents/run.
 type runAgentRequest struct {
-	Prompt   string `json:"prompt"   binding:"required"`
-	Agent    string `json:"agent,omitempty"`
-	Provider string `json:"provider,omitempty"` // "claude" (default), "codex", "copilot"
-	Model    string `json:"model,omitempty"`    // model override for the chosen provider
+	Prompt         string `json:"prompt"   binding:"required"`
+	Agent          string `json:"agent,omitempty"`
+	Provider       string `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot"
+	Model          string `json:"model,omitempty"`           // model override for the chosen provider
+	ThinkingBudget string `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
 }
 
 // runAgentResponse is the synchronous response.
@@ -65,12 +66,13 @@ func (a *API) runAgentREST(c *gin.Context) {
 	// Collect events (the caller gets the final result, not a stream).
 	var events []airunner.Event
 	result := runner.Run(c.Request.Context(), airunner.RunConfig{
-		Prompt:       prompt,
-		SystemPrompt: systemPrompt,
-		MCPURL:       mcpURL,
-		MCPToken:     user.Token,
-		AllowedTools: "mcp__nube__*",
-		Model:        model,
+		Prompt:         prompt,
+		SystemPrompt:   systemPrompt,
+		MCPURL:         mcpURL,
+		MCPToken:       user.Token,
+		AllowedTools:   "mcp__nube__*",
+		Model:          model,
+		ThinkingBudget: req.ThinkingBudget,
 	}, sessionID, func(ev airunner.Event) {
 		events = append(events, ev)
 	})

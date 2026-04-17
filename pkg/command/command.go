@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/version"
 )
 
 // Verb describes what action to take.
@@ -61,13 +62,14 @@ type WebhookAddress struct {
 // Command is the universal unit of intent. Every adapter parses external
 // input into this struct before dispatching to the router.
 type Command struct {
-	ID       string         `json:"id"`
-	Verb     Verb           `json:"verb"`
-	Target   Target         `json:"target"`
-	Params   map[string]any `json:"params,omitempty"`
-	UserID   string         `json:"user_id"`
-	ReplyTo  ReplyInfo      `json:"reply_to"`
-	IssuedAt time.Time      `json:"issued_at"`
+	ID            string         `json:"id"`
+	SyntaxVersion string         `json:"syntax_version"`
+	Verb          Verb           `json:"verb"`
+	Target        Target         `json:"target"`
+	Params        map[string]any `json:"params,omitempty"`
+	UserID        string         `json:"user_id"`
+	ReplyTo       ReplyInfo      `json:"reply_to"`
+	IssuedAt      time.Time      `json:"issued_at"`
 }
 
 // Result is returned by executor dispatch methods.
@@ -118,4 +120,14 @@ type CommandResultEvent struct {
 // NewID generates a unique command ID.
 func NewID() string {
 	return models.GenerateID("cmd-")
+}
+
+// NewCommand creates a Command with the current syntax version pre-filled.
+func NewCommand() Command {
+	return Command{
+		ID:            NewID(),
+		SyntaxVersion: version.CommandSyntax,
+		IssuedAt:      time.Now().UTC(),
+		Params:        make(map[string]any),
+	}
 }

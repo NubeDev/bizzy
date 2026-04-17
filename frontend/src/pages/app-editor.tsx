@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useParams, Link } from "react-router-dom"
-import { ArrowLeft, Plus, Trash2, Check, Loader2, Save, Globe, Sparkles } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Check, Loader2, Save, Globe, Sparkles, FlaskConical, Eye } from "lucide-react"
 import {
   useMyApp, useUpdateApp, usePublishApp,
   useAddTool, useDeleteTool, useUpdateTool,
@@ -8,6 +8,8 @@ import {
 } from "@/hooks/use-my-apps"
 import { VisibilityBadge } from "@/components/store/visibility-badge"
 import { AIWorkshop } from "@/components/store/ai-workshop"
+import { AppVisualBuilder } from "@/components/store/app-visual-builder"
+import { ToolWorkbench } from "@/components/workshop/tool-workbench"
 import { categoryLabel } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -149,6 +151,8 @@ export function AppEditorPage() {
       <Tabs defaultValue="ai">
         <TabsList className="bg-transparent border-b border-border/30 rounded-none w-full justify-start gap-0 p-0 h-auto">
           <TabsTrigger value="ai" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><Sparkles size={14} className="mr-1.5" />AI Workshop</TabsTrigger>
+          <TabsTrigger value="visual" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><Eye size={14} className="mr-1.5" />Visual Builder</TabsTrigger>
+          <TabsTrigger value="workshop" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors"><FlaskConical size={14} className="mr-1.5" />Tool Workshop</TabsTrigger>
           <TabsTrigger value="details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Details</TabsTrigger>
           <TabsTrigger value="tools" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Tools ({app.tools?.length || 0})</TabsTrigger>
           <TabsTrigger value="prompts" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-[13px] text-muted-foreground transition-colors">Prompts ({app.prompts?.length || 0})</TabsTrigger>
@@ -160,6 +164,16 @@ export function AppEditorPage() {
         {/* AI Workshop tab */}
         <TabsContent value="ai" className="mt-4">
           <AIWorkshop appId={app.id} appName={app.displayName} appDescription={app.description} />
+        </TabsContent>
+
+        {/* Visual Builder tab — redesign tool UIs with AI */}
+        <TabsContent value="visual" className="mt-4">
+          <AppVisualBuilder app={app} />
+        </TabsContent>
+
+        {/* Tool Workshop tab — inline workbench for testing tools */}
+        <TabsContent value="workshop" className="mt-4">
+          <InlineWorkshop app={app} />
         </TabsContent>
 
         {/* Details tab */}
@@ -505,6 +519,76 @@ function PromptCard({ prompt, onUpdate, onDelete }: {
             />
           </div>
         )}
+    </div>
+  )
+}
+
+function InlineWorkshop({ app }: { app: StoreApp }) {
+  const [activeToolName, setActiveToolName] = useState<string | null>(null)
+  const tools = app.tools || []
+  const activeTool = tools.find((t) => t.name === activeToolName) || tools[0] || null
+
+  const allowedHosts = app.permissions?.allowedHosts || []
+  const settings: Record<string, string> = {}
+  const secrets: Record<string, string> = {}
+  for (const def of app.settings || []) {
+    if (def.type === "secret") {
+      secrets[def.key] = def.default || ""
+    } else {
+      settings[def.key] = def.default || ""
+    }
+  }
+
+  if (!tools.length) {
+    return (
+      <p className="text-sm text-muted-foreground text-center py-12">
+        Add tools in the Tools tab first, then come back here to test them.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex gap-5">
+      {/* Tool list */}
+      <div className="w-48 shrink-0 space-y-1">
+        {tools.map((t) => (
+          <button
+            key={t.name}
+            onClick={() => setActiveToolName(t.name)}
+            className={`w-full text-left px-3 py-2 text-sm font-mono rounded-none transition-colors ${
+              activeTool?.name === t.name
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            {t.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Workbench */}
+      <div className="flex-1 min-w-0 rounded-none border border-border bg-card p-5">
+        {activeTool && (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <code className="text-sm font-semibold font-mono">{activeTool.name}</code>
+              <span className="font-mono text-[10px] border border-border px-1.5 py-0.5 text-muted-foreground">
+                {activeTool.toolClass}
+              </span>
+            </div>
+            {activeTool.description && (
+              <p className="text-xs text-muted-foreground mb-4">{activeTool.description}</p>
+            )}
+            <ToolWorkbench
+              key={activeTool.name}
+              tool={activeTool}
+              allowedHosts={allowedHosts}
+              settings={settings}
+              secrets={secrets}
+            />
+          </>
+        )}
+      </div>
     </div>
   )
 }

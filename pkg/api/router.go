@@ -10,7 +10,9 @@ import (
 	"github.com/NubeDev/bizzy/pkg/command"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/plugin"
 	"github.com/NubeDev/bizzy/pkg/services"
+	"github.com/NubeDev/bizzy/pkg/version"
 	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,6 +35,9 @@ type API struct {
 	// Reusable application services (decoupled from HTTP).
 	AgentSvc *services.AgentService
 	ToolSvc  *services.ToolService
+
+	// Plugin system (optional — nil if NATS bus is not enabled).
+	PluginRegistry *plugin.Registry
 
 	// Command bus (optional — nil if not configured).
 	CmdRouter      *command.Router
@@ -64,9 +69,10 @@ func (a *API) SetupRouter() *gin.Engine {
 		var userCount int64
 		a.DB.Model(&models.User{}).Count(&userCount)
 		c.JSON(200, gin.H{
-			"status": "ok",
-			"users":  userCount,
-			"apps":   len(a.AppRegistry.List()),
+			"status":   "ok",
+			"versions": version.All(),
+			"users":    userCount,
+			"apps":     len(a.AppRegistry.List()),
 		})
 	})
 
@@ -104,6 +110,9 @@ func (a *API) SetupRouter() *gin.Engine {
 	// App catalog.
 	authed.GET("/apps", a.listApps)
 	authed.GET("/apps/:id", a.getApp)
+
+	// App Workshop: test a tool script in a sandboxed runtime.
+	authed.POST("/api/apps/test-tool", a.testTool)
 
 	// App CRUD (admin).
 	admin.POST("/apps", a.createApp)
@@ -204,6 +213,16 @@ func (a *API) SetupRouter() *gin.Engine {
 
 		// Webhook logs (admin).
 		admin.GET("/api/webhooks/logs", a.listWebhookLogs)
+	}
+
+	// --- Plugins ---
+	if a.PluginRegistry != nil {
+		plugins := admin.Group("/api/plugins")
+		plugins.GET("", a.listPlugins)
+		plugins.GET("/:name", a.getPlugin)
+		plugins.DELETE("/:name", a.deletePlugin)
+		plugins.POST("/:name/disable", a.disablePlugin)
+		plugins.POST("/:name/enable", a.enablePlugin)
 	}
 
 	// --- Workflows ---

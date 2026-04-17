@@ -61,7 +61,7 @@ MCP Client (Claude CLI, Cursor, etc.)
 
 ### BuildServer(installs)
 
-Called per-request. Creates a fresh `mcp.Server` scoped to the user's enabled installs:
+Called per-request. Creates a fresh `mcp.Server` scoped to the user's enabled installs, plus active plugin tools:
 
 ```
 for each enabled AppInstall:
@@ -69,7 +69,13 @@ for each enabled AppInstall:
   2. If app has OpenAPI  -> registerOpenAPITools()
   3. If app has JS tools -> registerJSTools()
   4. Always             -> registerPrompts()
+
+for each active Plugin:
+  5. Register plugin tools -> registerPluginTools()   (NATS req/reply proxy)
+  6. Register plugin prompts -> registerPluginPrompts()
 ```
+
+See [PLUGIN-SYSTEM.md](PLUGIN-SYSTEM.md) for how plugins register tools/prompts over NATS.
 
 ---
 

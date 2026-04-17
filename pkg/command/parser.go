@@ -3,7 +3,6 @@ package command
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // ParseConfig controls how bare text is handled per adapter.
@@ -47,13 +46,9 @@ func (p *Parser) Parse(text string, userID string, replyTo ReplyInfo, cfg ParseC
 		text = strings.TrimSpace(text)
 	}
 
-	cmd := Command{
-		ID:       NewID(),
-		UserID:   userID,
-		ReplyTo:  replyTo,
-		IssuedAt: time.Now().UTC(),
-		Params:   make(map[string]any),
-	}
+	cmd := NewCommand()
+	cmd.UserID = userID
+	cmd.ReplyTo = replyTo
 
 	// Split into tokens.
 	tokens := tokenize(text)

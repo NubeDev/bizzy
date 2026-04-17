@@ -16,7 +16,6 @@ import (
 
 	"github.com/NubeDev/bizzy/pkg/command"
 	"github.com/NubeDev/bizzy/pkg/models"
-	gomail "github.com/wneessen/go-mail"
 	gmail "google.golang.org/api/gmail/v1"
 	"gorm.io/gorm"
 )

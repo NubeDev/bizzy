@@ -25,11 +25,12 @@ func (r *ClaudeRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 	var toolStartTime time.Time
 
 	res := claude.Run(ctx, claude.RunConfig{
-		Prompt:       cfg.Prompt,
-		ResumeID:     cfg.ResumeID,
-		MCPURL:       cfg.MCPURL,
-		MCPToken:     cfg.MCPToken,
-		AllowedTools: cfg.AllowedTools,
+		Prompt:         cfg.Prompt,
+		ResumeID:       cfg.ResumeID,
+		MCPURL:         cfg.MCPURL,
+		MCPToken:       cfg.MCPToken,
+		AllowedTools:   cfg.AllowedTools,
+		ThinkingBudget: cfg.ThinkingBudget,
 	}, sessionID, func(ev claude.Event) {
 		if ev.Type == "tool_call" {
 			// Finish the previous tool call if one was pending.

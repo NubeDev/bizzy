@@ -6,6 +6,7 @@ import { MyAppsPage } from './pages/my-apps'
 import { AppEditorPage } from './pages/app-editor'
 import { CreateAppPage } from './pages/create-app'
 import { ChatPage } from './pages/chat'
+import { WorkshopPage } from './pages/workshop'
 
 function App() {
   return (
@@ -17,6 +18,8 @@ function App() {
         <Route path="/my-apps" element={<MyAppsPage />} />
         <Route path="/my-apps/create" element={<CreateAppPage />} />
         <Route path="/my-apps/:id/edit" element={<AppEditorPage />} />
+        <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/my-apps/:id/workshop" element={<WorkshopPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

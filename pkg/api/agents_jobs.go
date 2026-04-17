@@ -14,10 +14,11 @@ import (
 
 // jobSubmitRequest is the JSON body for POST /api/agents/jobs.
 type jobSubmitRequest struct {
-	Prompt   string `json:"prompt"   binding:"required"`
-	Agent    string `json:"agent,omitempty"`
-	Provider string `json:"provider,omitempty"` // "claude" (default), "ollama", "openai", etc.
-	Model    string `json:"model,omitempty"`
+	Prompt         string `json:"prompt"   binding:"required"`
+	Agent          string `json:"agent,omitempty"`
+	Provider       string `json:"provider,omitempty"`        // "claude" (default), "ollama", "openai", etc.
+	Model          string `json:"model,omitempty"`
+	ThinkingBudget string `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
 }
 
 // jobSubmitResponse is returned immediately after submitting a job.
@@ -66,12 +67,13 @@ func (a *API) submitJob(c *gin.Context) {
 		model,
 		runner,
 		airunner.RunConfig{
-			Prompt:       prompt,
-			SystemPrompt: systemPrompt,
-			MCPURL:       mcpURL,
-			MCPToken:     user.Token,
-			AllowedTools: "mcp__nube__*",
-			Model:        model,
+			Prompt:         prompt,
+			SystemPrompt:   systemPrompt,
+			MCPURL:         mcpURL,
+			MCPToken:       user.Token,
+			AllowedTools:   "mcp__nube__*",
+			Model:          model,
+			ThinkingBudget: req.ThinkingBudget,
 		},
 		sessionID,
 		user.ID,

@@ -1,0 +1,12 @@
+{
+  "name": "exchange_rate",
+  "description": "Get current exchange rates between USD, VND, and AUD. Useful for converting flight prices.",
+  "toolClass": "read-only",
+  "params": {
+    "amount_usd": {
+      "type": "number",
+      "required": false,
+      "description": "USD amount to convert (optional, just shows rates if omitted)"
+    }
+  }
+}

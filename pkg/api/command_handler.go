@@ -5,6 +5,7 @@ import (
 
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/command"
+	"github.com/NubeDev/bizzy/pkg/version"
 	"github.com/gin-gonic/gin"
 )
 
@@ -47,13 +48,11 @@ func (a *API) handleCommand(c *gin.Context) {
 		}
 	} else if req.Verb != "" {
 		// Structured command.
-		cmd = command.Command{
-			ID:      command.NewID(),
-			Verb:    command.Verb(req.Verb),
-			UserID:  user.ID,
-			ReplyTo: replyTo,
-			Params:  req.Params,
-		}
+		cmd = command.NewCommand()
+		cmd.Verb = command.Verb(req.Verb)
+		cmd.UserID = user.ID
+		cmd.ReplyTo = replyTo
+		cmd.Params = req.Params
 		if req.Target != "" {
 			parts := splitTarget(req.Target)
 			cmd.Target = command.Target{Kind: parts[0], Name: parts[1]}
@@ -79,9 +78,10 @@ func (a *API) handleCommand(c *gin.Context) {
 //	GET /api/command/help
 func (a *API) handleCommandHelp(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"verbs": []string{"run", "ask", "status", "cancel", "restart", "list", "approve", "reject", "help"},
+		"version":      version.CommandSyntax,
+		"verbs":        []string{"run", "ask", "status", "cancel", "restart", "list", "approve", "reject", "help"},
 		"target_kinds": []string{"workflow", "tool", "job", "prompt"},
-		"syntax": "[verb] [kind/name] [--param value ...]",
+		"syntax":       "[verb] [kind/name] [--param value ...]",
 		"examples": []string{
 			"run workflow/weekly-report --site Sydney",
 			"run tool/rubix.query_nodes --floor 3",

@@ -148,14 +148,11 @@ func (w *Adapter) Handler() http.HandlerFunc {
 			}
 		} else if req.Verb != "" {
 			// Structured mode.
-			cmd = command.Command{
-				ID:       command.NewID(),
-				Verb:     command.Verb(req.Verb),
-				UserID:   userID,
-				ReplyTo:  replyTo,
-				Params:   req.Params,
-				IssuedAt: time.Now().UTC(),
-			}
+			cmd = command.NewCommand()
+			cmd.Verb = command.Verb(req.Verb)
+			cmd.UserID = userID
+			cmd.ReplyTo = replyTo
+			cmd.Params = req.Params
 			if req.Target != "" {
 				kind, name := splitTarget(req.Target)
 				cmd.Target = command.Target{Kind: kind, Name: name}

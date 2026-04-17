@@ -36,6 +36,10 @@ const (
 	TopicToolCalled    = "tool.called"
 	TopicToolCompleted = "tool.completed"
 	TopicToolFailed    = "tool.failed"
+
+	// Plugin lifecycle.
+	TopicPluginRegistered   = "extension.register"
+	TopicPluginDeregistered = "extension.deregister"
 )
 
 // Event is the envelope for all bus messages.

@@ -17,6 +17,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/bus"
 	"github.com/NubeDev/bizzy/pkg/command"
 	"github.com/NubeDev/bizzy/pkg/notify"
+	"github.com/NubeDev/bizzy/pkg/plugin"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"gorm.io/gorm"
 )
@@ -32,6 +33,19 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 
 	a.Workflows.SetBus(eventBus)
 	agentSvc.Jobs.SetBus(eventBus)
+
+	// --- Plugin System ---
+	pluginReg := plugin.NewRegistry(plugin.RegistryConfig{
+		NC: eventBus.Conn(),
+		DB: db,
+	})
+	if err := pluginReg.Start(); err != nil {
+		log.Printf("[plugins] failed to start registry: %v", err)
+	} else {
+		a.PluginRegistry = pluginReg
+		a.MCPFactory.SetPluginSource(plugin.NewMCPBridge(pluginReg))
+		fmt.Fprintf(os.Stderr, "[nube-server] plugin system: enabled\n")
+	}
 
 	adapterRegistry := adapters.NewRegistry()
 	cmdParser := command.NewParser()
@@ -115,5 +129,10 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 	}
 
 	fmt.Fprintf(os.Stderr, "[nube-server] command bus: enabled (NATS embedded)\n")
-	return eventBus.Close, nil
+	return func() {
+		if pluginReg != nil {
+			pluginReg.Stop()
+		}
+		eventBus.Close()
+	}, nil
 }

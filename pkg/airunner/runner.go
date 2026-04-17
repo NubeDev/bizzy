@@ -26,8 +26,9 @@ type RunConfig struct {
 	MCPURL       string `json:"mcp_url,omitempty"`        // MCP server endpoint
 	MCPToken     string `json:"mcp_token,omitempty"`      // Bearer token for MCP auth
 	AllowedTools string `json:"allowed_tools,omitempty"`  // Tool pattern filter
-	Model        string `json:"model,omitempty"`          // Model override (e.g. "o4-mini", "gpt-4.1")
-	WorkDir      string `json:"work_dir,omitempty"`       // Working directory for the CLI process
+	Model          string `json:"model,omitempty"`            // Model override (e.g. "o4-mini", "gpt-4.1")
+	ThinkingBudget string `json:"thinking_budget,omitempty"` // Thinking level: "low", "medium", "high", or token count
+	WorkDir        string `json:"work_dir,omitempty"`        // Working directory for the CLI process
 }
 
 // Event is a normalised event emitted by any provider.

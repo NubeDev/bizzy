@@ -1232,6 +1232,25 @@ CREATE TABLE cron_commands (
 }
 ```
 
+### Environment variables
+
+Adapters are enabled via environment variables at server startup:
+
+| Variable | Adapter | Description |
+|---|---|---|
+| `NUBE_WEBHOOK_SECRET` | Webhook | HMAC-SHA256 signing secret (optional — if empty, signature verification is skipped) |
+| `NUBE_SLACK_BOT_TOKEN` | Slack | Bot token (`xoxb-...`). If set, Slack adapter starts automatically. |
+| `NUBE_SLACK_APP_TOKEN` | Slack | App-level token (`xapp-...`) for Socket Mode. |
+| `NUBE_GMAIL_ENABLED` | Gmail | Set to `"true"` to enable the Gmail adapter. |
+| `NUBE_SMTP_HOST` | Gmail | SMTP server for sending email replies. |
+| `NUBE_SMTP_PORT` | Gmail | SMTP port (default: 587). |
+| `NUBE_SMTP_USER` | Gmail | SMTP username. |
+| `NUBE_SMTP_PASSWORD` | Gmail | SMTP password. |
+| `NUBE_SMTP_FROM` | Gmail | From address for email replies. |
+| `NUBE_GMAIL_ALLOWED_DOMAINS` | Gmail | Comma-separated domain whitelist (e.g. `"nube-io.com,example.com"`). |
+
+The cron adapter is always enabled — it reads scheduled commands from the `cron_commands` table and fires them on schedule. Cron entries are managed via the REST API (`/api/cron`).
+
 ---
 
 ## File layout

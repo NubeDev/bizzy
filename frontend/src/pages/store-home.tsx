@@ -19,6 +19,49 @@ export function StoreHomePage() {
   const [sort, setSort] = useState("popular")
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // Typewriter / backspace cycling effect
+  const phrases = ["listo", "hey listo", "hola listo"]
+  const [displayed, setDisplayed] = useState("")
+  const [cursorOn, setCursorOn] = useState(true)
+
+  useEffect(() => {
+    let phraseIdx = 0
+    let charIdx = 0
+    let deleting = false
+    let timeout: ReturnType<typeof setTimeout>
+
+    // Cursor blink
+    const cursorInterval = setInterval(() => setCursorOn(v => !v), 530)
+
+    const tick = () => {
+      const current = phrases[phraseIdx]
+      if (!deleting) {
+        charIdx++
+        setDisplayed(current.slice(0, charIdx))
+        if (charIdx === current.length) {
+          // Pause at full word before deleting
+          timeout = setTimeout(() => { deleting = true; tick() }, 1800)
+          return
+        }
+        timeout = setTimeout(tick, 95 + Math.random() * 55)
+      } else {
+        charIdx--
+        setDisplayed(current.slice(0, charIdx))
+        if (charIdx === 0) {
+          deleting = false
+          phraseIdx = (phraseIdx + 1) % phrases.length
+          // Pause before typing next
+          timeout = setTimeout(tick, 420)
+          return
+        }
+        timeout = setTimeout(tick, 55 + Math.random() * 35)
+      }
+    }
+
+    timeout = setTimeout(tick, 600)
+    return () => { clearTimeout(timeout); clearInterval(cursorInterval) }
+  }, [])
+
   // Bouncing dots state: true during initial load (3s) or while typing
   const [bouncing, setBouncing] = useState(true)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -58,9 +101,6 @@ export function StoreHomePage() {
       document.getElementById("app-grid")?.scrollIntoView({ behavior: "smooth" })
     }
   }
-
-  // Split "REN-AI" into letters for stagger
-  const letters = ["l", "-", "a", "i"]
 
   return (
     <div className="min-h-full">
@@ -117,40 +157,40 @@ export function StoreHomePage() {
           }} />
         </div>
 
-        {/* Brand title — letters + dots inline on same row */}
+        {/* Brand title — typewriter / backspace cycling */}
         <motion.div
           className="relative z-10 flex items-end mb-10 select-none"
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
+          initial={{ opacity: 0, y: 40, filter: "blur(12px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          {letters.map((letter, i) => (
-            <motion.span
-              key={i}
-              className="font-mono font-extralight leading-[0.9] tracking-tight"
-              style={{
-                fontSize: "clamp(5rem,15vw,12rem)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.45) 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                display: "inline-block",
-              }}
-              variants={{
-                hidden: { opacity: 0, y: 60, filter: "blur(12px)" },
-                visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
-              }}
-              whileHover={{
-                scale: 1.08,
-                filter: "blur(0px)",
-                WebkitTextFillColor: "transparent",
-                transition: { duration: 0.2 },
-              }}
-            >
-              {letter}
-            </motion.span>
-          ))}
+          <span
+            className="font-mono font-extralight leading-[0.9] tracking-tight"
+            style={{
+              fontSize: "clamp(3rem,9vw,7rem)",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.45) 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              minWidth: "2ch",
+              display: "inline-block",
+            }}
+          >
+            {displayed}
+          </span>
+          {/* Blinking cursor */}
+          <span
+            className="font-mono font-extralight leading-[0.9] ml-[2px]"
+            style={{
+              fontSize: "clamp(3rem,9vw,7rem)",
+              color: "rgba(255,255,255,0.55)",
+              opacity: cursorOn ? 1 : 0,
+              transition: "opacity 0.1s",
+              display: "inline-block",
+              lineHeight: 0.9,
+            }}
+          >|</span>
 
-          {/* 5 coloured bouncing balls — inline, after last letter, bottom-aligned */}
+          {/* 5 coloured bouncing balls — inline, after cursor, bottom-aligned */}
           <div className="ml-5 pb-[0.15em]">
             <BouncingBalls active={bouncing} size={14} />
           </div>
@@ -158,7 +198,7 @@ export function StoreHomePage() {
 
         {/* Search box */}
         <motion.div
-          className="relative z-10 w-full max-w-[640px] px-6"
+          className="relative z-10 w-full max-w-[760px] px-6"
           initial={{ opacity: 0, y: 30, filter: "blur(8px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.8, delay: 0.55, ease: [0.16, 1, 0.3, 1] }}

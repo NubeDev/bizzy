@@ -15,11 +15,12 @@ import (
 
 // RunConfig configures a Claude Code invocation.
 type RunConfig struct {
-	Prompt       string
-	ResumeID     string // If set, resumes an existing Claude session instead of starting fresh
-	MCPURL       string // e.g. http://localhost:8090/mcp
-	MCPToken     string // Bearer token for MCP auth
-	AllowedTools string // Tool pattern, e.g. "mcp__nube__*"
+	Prompt         string
+	ResumeID       string // If set, resumes an existing Claude session instead of starting fresh
+	MCPURL         string // e.g. http://localhost:8090/mcp
+	MCPToken       string // Bearer token for MCP auth
+	AllowedTools   string // Tool pattern, e.g. "mcp__nube__*"
+	ThinkingBudget string // "low", "medium", "high", or token count (e.g. "5000")
 }
 
 // Event is a parsed event from Claude's stream-json output.
@@ -67,6 +68,11 @@ func Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Even
 		"--verbose",
 		"--allowedTools", cfg.AllowedTools, "ToolSearch",
 		"--mcp-config", mcpFile,
+	}
+
+	// Set thinking budget if specified.
+	if cfg.ThinkingBudget != "" {
+		args = append(args, "--thinking-budget", cfg.ThinkingBudget)
 	}
 
 	// Resume an existing session for multi-turn conversations.
