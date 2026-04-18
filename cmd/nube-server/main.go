@@ -46,6 +46,9 @@ func main() {
 	// Migrate: backfill provider="claude" on existing sessions that have no provider set.
 	migrateSessionProvider(db)
 
+	// Generate the bizzy-dev bootstrap app (recreated every startup).
+	generateBootstrapApp(appsDir)
+
 	// Load app registry from disk + database.
 	registry, err := apps.NewRegistry(db, appsDir)
 	if err != nil {

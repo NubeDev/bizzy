@@ -21,6 +21,7 @@ func DefaultProviderConfig() ProviderConfig {
 		Providers: map[string]ProviderSettings{
 			"claude":    {Enabled: true},
 			"ollama":    {Enabled: true, Host: "http://localhost:11434"},
+			"opencode":  {Enabled: true},
 			"openai":    {Enabled: false},
 			"anthropic": {Enabled: false},
 			"gemini":    {Enabled: false},

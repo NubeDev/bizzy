@@ -79,15 +79,29 @@ func (t *LoggingRoundTripper) Entries() []HTTPLogEntry {
 	return out
 }
 
+// ToolCaller lets a JS tool call other tools in the same app.
+// Implemented by a closure in mcp_jstools.go / tools.go that scopes
+// calls to the current app only.
+type ToolCaller interface {
+	CallTool(toolName string, params map[string]any) (map[string]any, error)
+}
+
 // JSRuntime executes JavaScript tools in a sandboxed Goja VM.
 type JSRuntime struct {
 	allowedHosts []string
 	secrets      map[string]string
 	config       map[string]string
 	appDir       string
+	appName      string
 	timeout      time.Duration
-	transport    http.RoundTripper // optional custom transport for HTTP tracing
+	transport    http.RoundTripper    // optional custom transport for HTTP tracing
+	pluginQuery  PluginQuerySource    // optional plugin discovery API for JS tools
+	toolCaller   ToolCaller           // optional — call other tools in the same app
+	envAllowlist []string             // env var prefixes allowed to read
 }
+
+// DefaultEnvAllowlist is the set of environment variable prefixes that JS tools can read.
+var DefaultEnvAllowlist = []string{"BIZZY_", "NUBE_", "OLLAMA_", "GITHUB_", "OPENAI_API_", "ANTHROPIC_API_"}
 
 // NewJSRuntime creates a runtime for executing JS tools within an app.
 func NewJSRuntime(app *App, secrets, config map[string]string, timeout time.Duration) *JSRuntime {
@@ -96,7 +110,9 @@ func NewJSRuntime(app *App, secrets, config map[string]string, timeout time.Dura
 		secrets:      secrets,
 		config:       config,
 		appDir:       app.Dir,
+		appName:      app.Name,
 		timeout:      timeout,
+		envAllowlist: DefaultEnvAllowlist,
 	}
 }
 
@@ -112,6 +128,20 @@ func NewTestJSRuntime(allowedHosts []string, secrets, settings map[string]string
 	}
 }
 
+// SetPluginQuery wires the plugin discovery API into this runtime.
+// When set, JS tools can use plugins.exists(), plugins.info(), plugins.list(),
+// and plugins.call() to discover and invoke plugin tools.
+func (r *JSRuntime) SetPluginQuery(pq PluginQuerySource) {
+	r.pluginQuery = pq
+}
+
+// SetToolCaller wires same-app tool calling into this runtime.
+// When set, JS tools can use tools.call("other_tool", {params}) to call
+// other tools in the same app.
+func (r *JSRuntime) SetToolCaller(tc ToolCaller) {
+	r.toolCaller = tc
+}
+
 // ExecuteScript runs inline JS source (with optional helpers) and returns the result.
 func (r *JSRuntime) ExecuteScript(script, helpers string, params map[string]any) (map[string]any, error) {
 	vm := goja.New()
@@ -120,6 +150,12 @@ func (r *JSRuntime) ExecuteScript(script, helpers string, params map[string]any)
 	r.injectSecretsAPI(vm)
 	r.injectConfigAPI(vm)
 	r.injectLogAPI(vm)
+	r.injectPluginsAPI(vm)
+	r.injectToolsAPI(vm)
+	r.injectBase64API(vm)
+	r.injectURLAPI(vm)
+	r.injectCryptoAPI(vm)
+	r.injectEnvAPI(vm)
 	// files API omitted — test-tool has no app directory
 
 	// Load helpers first.
@@ -186,6 +222,12 @@ func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[strin
 	r.injectConfigAPI(vm)
 	r.injectLogAPI(vm)
 	r.injectFilesAPI(vm)
+	r.injectPluginsAPI(vm)
+	r.injectToolsAPI(vm)
+	r.injectBase64API(vm)
+	r.injectURLAPI(vm)
+	r.injectCryptoAPI(vm)
+	r.injectEnvAPI(vm)
 
 	// Load shared helpers if _helpers.js exists in the same directory.
 	helpersPath := filepath.Join(filepath.Dir(scriptPath), "_helpers.js")

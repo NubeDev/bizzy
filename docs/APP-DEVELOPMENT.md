@@ -69,6 +69,15 @@ tags:                           # For store search/filtering
   - monitoring
 
 timeout: 15s                    # Tool execution timeout (default 30s)
+
+plugins:                        # Optional — declare plugin dependencies
+  required:                     # App needs these plugins to function
+    - name: github
+      min_version: "1.0.0"      # Optional semver constraint
+      reason: "Needed for PR tracking"
+  optional:                     # App works without these, but gains features
+    - name: slack-adapter
+      reason: "Enables Slack notifications"
 ```
 
 ### Minimal app.yaml (no tools, prompt-only)
@@ -171,12 +180,52 @@ JS tool rules:
 | `http.delete(url, opts?)` | HTTP DELETE |
 | `config.<key>` | App settings values (from `app.yaml` settings) |
 | `secrets.<key>` | App secret values (from `app.yaml` secrets) |
+| `tools.call(name, params)` | Call another tool in the same app, returns `{result: ...}` or `{error: "..."}` |
+| `plugins.exists(name)` | Check if a plugin is active (`true`/`false`) |
+| `plugins.info(name)` | Plugin metadata: `{name, version, status, services, tools}` or `null` |
+| `plugins.list(serviceFilter?)` | List active plugin names. Optional filter: `"tools"`, `"adapter"`, etc. |
+| `plugins.call(plugin, tool, params)` | Call a plugin tool, returns `{result: ...}` or `{error: "..."}` |
+| `base64.encode(str)` | Base64 encode a string |
+| `base64.decode(str)` | Base64 decode a string |
+| `url.buildQuery({k: v, ...})` | Build URL query string from object |
+| `url.parse(urlStr)` | Parse URL into `{protocol, host, path, query, hash}` |
+| `crypto.sha256(data)` | SHA-256 hash, returns hex string |
+| `crypto.sha1(data)` | SHA-1 hash, returns hex string |
+| `crypto.md5(data)` | MD5 hash, returns hex string |
+| `crypto.hmac(algo, key, data)` | HMAC signature, returns hex string (algo: sha256, sha1, md5) |
+| `env.get(key)` | Read environment variable (allowlisted prefixes only: BIZZY\_, NUBE\_, OLLAMA\_, GITHUB\_) |
 | `encodeURIComponent(s)` | URL-encode a string |
 | `JSON.parse(s)` / `JSON.stringify(o)` | JSON helpers |
 
 HTTP options: `{ headers: { "Authorization": "Bearer " + token } }`
 
 HTTP response shape: `{ status: 200, body: "raw string", json: { parsed: "object" } }`
+
+**Plugin API examples:**
+
+```js
+// Check if a plugin exists before using it
+if (plugins.exists("github")) {
+  var prs = plugins.call("github", "list_prs", {
+    owner: "NubeDev", repo: "bizzy", state: "open"
+  });
+  if (!prs.error) {
+    return { open_prs: prs.result.length };
+  }
+} else {
+  return { note: "GitHub plugin not running" };
+}
+
+// List all plugins that provide tools
+var toolPlugins = plugins.list("tools");
+
+// Get plugin details
+var info = plugins.info("github");
+// info = { name: "github", version: "1.0.0", status: "active",
+//          services: ["tools"], tools: ["list_prs", "get_pr", ...] }
+```
+
+If the plugin system is not enabled (no NATS bus), `plugins.exists()` returns `false`, `plugins.list()` returns `[]`, and `plugins.call()` returns `{error: "plugin system not available"}`.
 
 ### 2. Prompt-mode tools (AI-executed)
 

@@ -1,0 +1,102 @@
+import { useRef, type ReactNode } from 'react'
+import { ArrowUp, Loader2, Trash2 } from 'lucide-react'
+import { useAutoResize } from './hooks'
+
+interface Props {
+  value: string
+  onChange: (value: string) => void
+  onSend: () => void
+  onKeyDown?: (e: React.KeyboardEvent) => void
+  isStreaming: boolean
+  placeholder?: string
+  /** Show clear button */
+  onClear?: () => void
+  /** Compact mode — smaller text/padding */
+  compact?: boolean
+  /** Custom accent color for the send button */
+  accentColor?: string
+  /** Content rendered above the input (e.g. provider selector, bouncing balls) */
+  header?: ReactNode
+  /** Content rendered below the input (e.g. prompt options, keyboard hints) */
+  footer?: ReactNode
+}
+
+export function ChatInput({
+  value,
+  onChange,
+  onSend,
+  onKeyDown,
+  isStreaming,
+  placeholder,
+  onClear,
+  compact,
+  accentColor,
+  header,
+  footer,
+}: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useAutoResize(textareaRef, value, compact ? 150 : 160)
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (onKeyDown) {
+      onKeyDown(e)
+      if (e.defaultPrevented) return
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      onSend()
+    }
+  }
+
+  const textSize = compact ? 'text-xs' : 'text-sm'
+  const minH = compact ? 'min-h-[20px]' : 'min-h-[24px]'
+  const maxH = compact ? 'max-h-[150px]' : 'max-h-[160px]'
+  const leading = compact ? 'leading-5' : 'leading-6'
+  const iconSize = compact ? 12 : 14
+  const btnSize = 'w-7 h-7'
+
+  return (
+    <div>
+      {header}
+
+      <div className={`flex items-end ${compact ? 'gap-2' : ''} bg-card border border-border px-3 py-2 focus-within:border-foreground/20 transition-colors`}>
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder || 'Ask anything...'}
+          rows={1}
+          className={`flex-1 bg-transparent ${textSize} text-foreground placeholder:text-muted-foreground resize-none focus:outline-none ${minH} ${maxH} py-0.5 ${leading}`}
+          disabled={isStreaming}
+        />
+        <div className={`flex items-center gap-1 ${compact ? '' : 'ml-2'}`}>
+          {onClear && (
+            <button
+              onClick={onClear}
+              className={`${btnSize} flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors`}
+              title="Clear"
+            >
+              <Trash2 size={compact ? 10 : 14} />
+            </button>
+          )}
+          <button
+            onClick={onSend}
+            disabled={!value.trim() || isStreaming}
+            className={`${btnSize} flex items-center justify-center disabled:opacity-30 hover:opacity-80 transition-opacity ${
+              accentColor ? 'text-white' : 'bg-primary text-primary-foreground'
+            }`}
+            style={accentColor ? { background: accentColor } : undefined}
+          >
+            {isStreaming ? <Loader2 size={iconSize} className="animate-spin" /> : <ArrowUp size={iconSize} />}
+          </button>
+        </div>
+      </div>
+
+      {footer}
+    </div>
+  )
+}
+
+/** Re-export the ref for consumers who need direct textarea access (e.g. command picker focus) */
+export { useAutoResize }

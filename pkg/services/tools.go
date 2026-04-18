@@ -16,6 +16,31 @@ import (
 type ToolService struct {
 	DB          *gorm.DB
 	AppRegistry *apps.Registry
+	// PluginQuery provides plugin discovery for JS tools (optional).
+	// When set, JS tools can use plugins.exists(), plugins.call(), etc.
+	PluginQuery apps.PluginQuerySource
+}
+
+// serviceToolCaller implements apps.ToolCaller for the ToolService path.
+type serviceToolCaller struct {
+	runtime   *apps.JSRuntime
+	manifests []apps.ToolManifest
+}
+
+func (c *serviceToolCaller) CallTool(toolName string, params map[string]any) (map[string]any, error) {
+	for _, m := range c.manifests {
+		if m.Name != toolName {
+			continue
+		}
+		if m.Script != "" {
+			return c.runtime.ExecuteScript(m.Script, "", params)
+		}
+		if m.ScriptPath != "" {
+			return c.runtime.Execute(m.ScriptPath, params)
+		}
+		return nil, fmt.Errorf("tool %s has no script", toolName)
+	}
+	return nil, fmt.Errorf("tool %s not found in this app", toolName)
 }
 
 // ResolvedTool contains a prepared runtime and manifest ready for execution.
@@ -70,8 +95,15 @@ func (s *ToolService) ResolveTool(userID, toolName string) (*ResolvedTool, error
 			}
 
 			m := manifest // copy for pointer
+			rt := apps.NewJSRuntime(app, secrets, config, timeout)
+			if s.PluginQuery != nil {
+				rt.SetPluginQuery(s.PluginQuery)
+			}
+			// Wire same-app tool calling.
+			allManifests := s.AppRegistry.GetTools(inst.AppName)
+			rt.SetToolCaller(&serviceToolCaller{runtime: rt, manifests: allManifests})
 			return &ResolvedTool{
-				Runtime:  apps.NewJSRuntime(app, secrets, config, timeout),
+				Runtime:  rt,
 				Manifest: &m,
 			}, nil
 		}

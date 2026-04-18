@@ -58,3 +58,51 @@ func (b *MCPBridge) ActivePluginPrompts() []apps.PluginPromptEntry {
 func (b *MCPBridge) CallTool(pluginName, toolName string, params map[string]any) (any, error) {
 	return b.reg.Proxy().Call(pluginName, toolName, params, ToolCallCtx{})
 }
+
+// ---------------------------------------------------------------------------
+// PluginQuerySource implementation — used by JSRuntime's plugins.* host API.
+// ---------------------------------------------------------------------------
+
+// PluginExists reports whether a named plugin is active.
+func (b *MCPBridge) PluginExists(name string) bool {
+	p, ok := b.reg.GetPlugin(name)
+	return ok && p.Status == "active"
+}
+
+// PluginInfo returns metadata about a plugin, or nil if not found.
+func (b *MCPBridge) PluginInfo(name string) *apps.PluginInfoResult {
+	p, ok := b.reg.GetPlugin(name)
+	if !ok {
+		return nil
+	}
+	services := make([]string, len(p.Manifest.Services))
+	for i, s := range p.Manifest.Services {
+		services[i] = string(s)
+	}
+	tools := make([]string, len(p.Manifest.Tools))
+	for i, t := range p.Manifest.Tools {
+		tools[i] = t.Name
+	}
+	return &apps.PluginInfoResult{
+		Name:     p.Manifest.Name,
+		Version:  p.Manifest.Version,
+		Status:   p.Status,
+		Services: services,
+		Tools:    tools,
+	}
+}
+
+// PluginList returns the names of active plugins, optionally filtered by service type.
+func (b *MCPBridge) PluginList(serviceFilter string) []string {
+	plugins := b.reg.ActivePluginsByService(serviceFilter)
+	names := make([]string, len(plugins))
+	for i, p := range plugins {
+		names[i] = p.Manifest.Name
+	}
+	return names
+}
+
+// CallPluginTool dispatches a tool call to a plugin over NATS.
+func (b *MCPBridge) CallPluginTool(pluginName, toolName string, params map[string]any) (any, error) {
+	return b.reg.Proxy().Call(pluginName, toolName, params, ToolCallCtx{})
+}

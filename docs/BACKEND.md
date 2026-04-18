@@ -152,6 +152,13 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 |---|---|
 | `/mcp`, `/mcp/*path` | Per-user MCP tool serving (StreamableHTTP) |
 
+### Bootstrap prompts
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/bootstrap/prompts` | List all built-in reference prompts (no app install required) |
+| `GET` | `/api/bootstrap/prompts/:name` | Get a single prompt by name (supports `?arg=value` substitution) |
+
 ### Admin
 
 | Method | Path | Description |

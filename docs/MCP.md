@@ -107,6 +107,12 @@ JavaScript tools run in a sandboxed [Goja](https://github.com/dop251/goja) runti
 | `config.*` | Read install settings |
 | `log.*` | Structured logging |
 | `files.read` | Read files from the app directory |
+| `plugins.*` | Discover and call plugin tools (`exists`, `info`, `list`, `call`) |
+| `tools.call` | Call another tool in the same app |
+| `base64.*` | Base64 encode/decode |
+| `url.*` | URL query building and parsing |
+| `crypto.*` | SHA-256, SHA-1, MD5 hashing and HMAC signatures |
+| `env.get` | Read allowlisted environment variables |
 
 Each tool has a JSON manifest defining its name, description, parameters, and execution mode. Timeout defaults to 5s (configurable via `timeout` in `app.yaml`).
 

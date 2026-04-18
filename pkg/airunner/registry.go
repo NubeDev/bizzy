@@ -18,6 +18,7 @@ func NewRegistry() *Registry {
 	r.Register(&OllamaRunner{})
 	r.Register(&CodexRunner{})
 	r.Register(&CopilotRunner{})
+	r.Register(&OpenCodeRunner{})
 	return r
 }
 

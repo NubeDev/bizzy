@@ -27,6 +27,29 @@ type PluginToolSource interface {
 	CallTool(pluginName, toolName string, params map[string]any) (any, error)
 }
 
+// PluginQuerySource provides plugin discovery and tool calling for JS tools.
+// Injected into the Goja runtime as the "plugins.*" host API so app JS code
+// can check if a plugin exists, list plugins, and call plugin tools directly.
+type PluginQuerySource interface {
+	// PluginExists reports whether a named plugin is active.
+	PluginExists(name string) bool
+	// PluginInfo returns metadata about a plugin, or nil if not found.
+	PluginInfo(name string) *PluginInfoResult
+	// PluginList returns the names of active plugins, optionally filtered by service type.
+	PluginList(serviceFilter string) []string
+	// CallPluginTool dispatches a tool call to a plugin over NATS and returns the result.
+	CallPluginTool(pluginName, toolName string, params map[string]any) (any, error)
+}
+
+// PluginInfoResult holds metadata about a plugin for the JS API.
+type PluginInfoResult struct {
+	Name     string   `json:"name"`
+	Version  string   `json:"version"`
+	Status   string   `json:"status"`
+	Services []string `json:"services"`
+	Tools    []string `json:"tools"`
+}
+
 // PluginToolEntry is a single plugin tool with its namespaced name.
 type PluginToolEntry struct {
 	FullName    string
@@ -63,6 +86,8 @@ type MCPFactory struct {
 	remoteCacheMu sync.RWMutex
 	// Plugin tool source (optional — nil if plugin system is not enabled).
 	pluginSource PluginToolSource
+	// Plugin query source for JS runtime (optional).
+	pluginQuery PluginQuerySource
 }
 
 type specData struct {
@@ -121,6 +146,12 @@ func (f *MCPFactory) Rebuild() {
 // Called once during server startup after both MCPFactory and plugin.Registry exist.
 func (f *MCPFactory) SetPluginSource(src PluginToolSource) {
 	f.pluginSource = src
+}
+
+// SetPluginQuery wires the plugin query source for JS tool runtimes.
+// When set, JS tools created by MCPFactory can use plugins.exists(), plugins.call(), etc.
+func (f *MCPFactory) SetPluginQuery(pq PluginQuerySource) {
+	f.pluginQuery = pq
 }
 
 // BuildAppContext generates a text summary of installed apps and their tools

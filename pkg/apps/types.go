@@ -21,6 +21,7 @@ type App struct {
 	Timeout       string          `yaml:"timeout" json:"timeout"`
 	OpenAPIRemote *OpenAPIRemote  `yaml:"openapi" json:"openapi,omitempty"`
 	Preamble      string          `yaml:"preamble" json:"preamble,omitempty"`
+	Plugins       *PluginDeps     `yaml:"plugins" json:"plugins,omitempty"`
 
 	// Populated by the loader, not from YAML.
 	Dir         string `yaml:"-" json:"dir"`
@@ -36,6 +37,19 @@ type OpenAPIRemote struct {
 	URL         string   `yaml:"url" json:"url"`
 	IncludeTags []string `yaml:"includeTags" json:"includeTags,omitempty"`
 	ExcludeTags []string `yaml:"excludeTags" json:"excludeTags,omitempty"`
+}
+
+// PluginDeps declares which plugins an app requires or optionally uses.
+type PluginDeps struct {
+	Required []PluginDep `yaml:"required" json:"required,omitempty"`
+	Optional []PluginDep `yaml:"optional" json:"optional,omitempty"`
+}
+
+// PluginDep is a single plugin dependency.
+type PluginDep struct {
+	Name       string `yaml:"name" json:"name"`
+	MinVersion string `yaml:"min_version" json:"min_version,omitempty"`
+	Reason     string `yaml:"reason" json:"reason,omitempty"`
 }
 
 // Permissions declares what an app is allowed to do.

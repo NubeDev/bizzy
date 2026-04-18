@@ -6,51 +6,9 @@
 import { useState, useRef, useEffect } from "react"
 import { ArrowUp, Loader2, Sparkles, Check, X, RotateCcw } from "lucide-react"
 import { useAgentChat } from "@/hooks/use-agent-chat"
+import { useBootstrapPrompts } from "@/hooks/use-bootstrap-prompts"
 import { Button } from "@/components/ui/button"
 import type { StoreTool, ToolParam } from "@/lib/types"
-import { TOOL_NAMING_RULES } from "@/lib/tool-naming"
-
-const EDIT_TOOL_PROMPT = `You are editing an existing JavaScript tool for NubeIO. The user will describe a change they want.
-
-IMPORTANT: Respond with ONLY a \`\`\`json:tool code block containing the FULL updated tool. Include ALL fields even if unchanged.
-
-\`\`\`json:tool
-{
-  "name": "tool_name",
-  "description": "Updated description",
-  "toolClass": "read-only",
-  "params": {
-    "param_name": { "type": "string", "required": true, "description": "..." },
-    "dropdown_param": { "type": "string", "required": true, "description": "...", "options": ["Option A", "Option B", "Other"] }
-  },
-  "script": "function handle(params) { ... }"
-}
-\`\`\`
-
-PARAM TYPES:
-- type "string" — text input. Add "options": ["a", "b", "c"] for a dropdown select.
-- type "number" — number input.
-- type "boolean" — true/false toggle.
-- NEVER use type "enum". Use type "string" with "options" array instead.
-
-The JS runtime APIs:
-- http.get(url), http.post(url, body), http.put(url, body), http.delete(url) — returns {status, json, body, headers}
-- For JSON APIs: var data = http.get(url); var items = data.json.results;
-- secrets.get(key), config.get(key) — read user settings
-- log.info(msg), log.warn(msg), log.error(msg)
-- Use var, not const/let.
-
-${TOOL_NAMING_RULES}
-
-RULES:
-- Keep the tool name the same unless the user explicitly asks to rename it.
-- Preserve existing functionality — only change what the user asks for.
-- Output the complete script, not a partial diff.
-- If adding params, include both old and new params.
-- If adding mode "qa", the name must end with "_qa".
-
-Current tool:
-`
 
 interface Props {
   tool: StoreTool
@@ -59,6 +17,7 @@ interface Props {
 }
 
 export function AIToolEditor({ tool, onApply, onClose }: Props) {
+  const { compose } = useBootstrapPrompts()
   const { messages, isStreaming, send, clear } = useAgentChat()
   const [input, setInput] = useState("")
   const [updatedTool, setUpdatedTool] = useState<StoreTool | null>(null)
@@ -107,7 +66,8 @@ export function AIToolEditor({ tool, onApply, onClose }: Props) {
       params: tool.params,
       script: tool.script,
     }, null, 2)
-    const prompt = EDIT_TOOL_PROMPT + toolJson + "\n\nUser's requested change:\n" + input.trim()
+    const reference = compose(["tool_editor", "tool_naming"])
+    const prompt = reference + "\n\nCurrent tool:\n" + toolJson + "\n\nUser's requested change:\n" + input.trim()
     send(prompt, input.trim())
     setInput("")
   }

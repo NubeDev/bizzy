@@ -5,6 +5,8 @@ import { useAgentChat } from '@/hooks/use-agent-chat'
 import { useCommandPicker, type PickerItem } from '@/hooks/use-command-picker'
 import { CommandPicker } from './command-picker'
 import { ChatMessageBubble } from './chat-message'
+import { ProviderSelector } from './provider-selector'
+import { ChatSuggestions, useAutoScroll, useAutoResize } from '@/lib/chat'
 
 interface Props {
   /** System prompt prepended to the first message. Gives the AI context about what app/page it's in. */
@@ -20,7 +22,9 @@ interface Props {
 }
 
 export function AgentChat({ systemPrompt, placeholder, suggestions, className, resumeSessionId }: Props) {
-  const { messages, isStreaming, send, clear, resumeSession } = useAgentChat()
+  const [provider, setProvider] = useState('claude')
+  const [model, setModel] = useState('')
+  const { messages, isStreaming, send, clear, resumeSession } = useAgentChat({ provider, model })
 
   // If a resumeSessionId is provided, join that session on mount
   useEffect(() => {
@@ -33,18 +37,8 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages])
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
-    }
-  }, [input])
+  useAutoScroll(scrollRef, [messages])
+  useAutoResize(textareaRef, input)
 
   const [pendingPromptItem, setPendingPromptItem] = useState<PickerItem | null>(null)
   const [promptOptions, setPromptOptions] = useState<string[]>([])
@@ -96,9 +90,7 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
     const hasArgs = item.arguments && item.arguments.length > 0
 
     if (hasArgs) {
-      // Collect all options from params
       const allOptions = item.arguments!.flatMap(a => a.options || [])
-
       setInput(`/${item.name} `)
       setPromptOptions(allOptions)
       if (item.prompt) setPendingPromptItem(item)
@@ -157,14 +149,21 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
     }
   }
 
+  const defaultSuggestions = suggestions || [
+    { label: 'Show system status', prompt: 'Show me the runtime status' },
+    { label: 'List all nodes', prompt: 'List all nodes in the system' },
+    { label: 'What can you do?', prompt: 'What tools and prompts do you have access to?' },
+  ]
+
   return (
     <div className={`flex flex-col h-full ${className || ''}`}>
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <EmptyState
-            suggestions={suggestions}
-            onInputChange={(text) => { setInput(text); textareaRef.current?.focus() }}
+          <ChatSuggestions
+            suggestions={defaultSuggestions}
+            onSelect={(prompt) => { setInput(prompt); textareaRef.current?.focus() }}
+            subtitle={`Type a message, or use / for prompts`}
           />
         ) : (
           <div className="max-w-3xl mx-auto py-4 px-4 space-y-5">
@@ -183,9 +182,15 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
       {/* Input bar */}
       <div className="sticky bottom-0 pt-3 pb-2 px-4 bg-background">
         <div className="max-w-3xl mx-auto relative">
-          {/* Bouncing balls — always visible, active while streaming */}
-          <div className="pb-2 pl-1">
+          {/* Provider selector + activity indicator */}
+          <div className="pb-2 pl-1 flex items-center justify-between">
             <BouncingBalls active={isStreaming} size={10} />
+            <ProviderSelector
+              provider={provider}
+              model={model}
+              onProviderChange={setProvider}
+              onModelChange={setModel}
+            />
           </div>
           {picker.isOpen && (
             <CommandPicker
@@ -252,37 +257,6 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
             </p>
           )}
         </div>
-      </div>
-    </div>
-  )
-}
-
-function EmptyState({ suggestions, onInputChange }: {
-  suggestions?: { label: string; prompt: string }[]
-  onInputChange: (text: string) => void
-}) {
-  const defaults = suggestions || [
-    { label: 'Show system status', prompt: 'Show me the runtime status' },
-    { label: 'List all nodes', prompt: 'List all nodes in the system' },
-    { label: 'What can you do?', prompt: 'What tools and prompts do you have access to?' },
-  ]
-
-  return (
-    <div className="flex flex-col items-center justify-center h-full px-4">
-      <h2 className="font-mono text-lg font-light mb-1 text-foreground">What can I help with?</h2>
-      <p className="text-xs text-muted-foreground mb-8">
-        Type a message, or use <kbd className="border border-border px-1 py-0.5 text-[9px] mx-0.5">/</kbd> for prompts
-      </p>
-      <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-        {defaults.map((s) => (
-          <button
-            key={s.label}
-            onClick={() => onInputChange(s.prompt)}
-            className="text-left px-3 py-2 border border-border bg-card hover:bg-accent transition-colors text-xs text-muted-foreground hover:text-foreground"
-          >
-            {s.label}
-          </button>
-        ))}
       </div>
     </div>
   )

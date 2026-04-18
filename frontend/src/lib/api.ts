@@ -7,6 +7,7 @@ import type {
   CreateAppRequest,
   StoreQuery,
   PluginSummary,
+  BootstrapPrompt,
 } from './types'
 
 class ApiError extends Error {
@@ -212,6 +213,24 @@ class ApiClient {
   }
   deletePlugin(name: string) {
     return this.request<{ status: string }>(`/api/plugins/${name}`, { method: 'DELETE' })
+  }
+
+  // AI providers
+  providers() {
+    return this.request<{
+      provider: string
+      available: boolean
+      type: string
+      models?: string[]
+    }[]>('/api/agents/providers')
+  }
+
+  // Bootstrap prompts — built-in reference docs from the backend
+  bootstrapPrompts() {
+    return this.request<BootstrapPrompt[]>('/api/bootstrap/prompts')
+  }
+  bootstrapPrompt(name: string) {
+    return this.request<BootstrapPrompt>(`/api/bootstrap/prompts/${name}`)
   }
 
   // Run a prompt via the agent API

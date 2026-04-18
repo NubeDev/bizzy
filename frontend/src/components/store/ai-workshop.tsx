@@ -7,13 +7,13 @@ import { SpecRenderer } from "@/lib/json-render-registry"
 import { outputToSpec } from "@/lib/output-to-spec"
 import { SchemaForm } from "@/components/workshop/schema-form"
 import { HttpTrace } from "@/components/workshop/http-trace"
-import { LivePreview, AVAILABLE_COMPONENTS } from "@/components/live-preview/renderer"
-import { TOOL_NAMING_RULES } from "@/lib/tool-naming"
+import { LivePreview } from "@/components/live-preview/renderer"
+import { useBootstrapPrompts } from "@/hooks/use-bootstrap-prompts"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { StoreTool, StorePrompt, StoreApp } from "@/lib/types"
 
-function buildSystemPrompt(app: StoreApp): string {
+function buildSystemPrompt(compose: (names: string[]) => string, app: StoreApp): string {
   const toolSummaries = (app.tools || []).map(t => {
     const paramList = Object.entries(t.params || {}).map(([k, v]) => {
       let desc = `${k}: ${v.type}`
@@ -31,7 +31,9 @@ function buildSystemPrompt(app: StoreApp): string {
 
   const hosts = app.permissions?.allowedHosts?.join(", ") || "(none)"
 
-  return `You are an AI app builder for NubeIO. You are editing the app "${app.displayName}" (${app.name}).
+  const reference = compose(["workshop", "ui_reference", "tool_naming"])
+
+  return `You are editing the app "${app.displayName}" (${app.name}).
 
 ## Current App State
 Description: ${app.description || "(none)"}
@@ -44,151 +46,12 @@ ${toolSummaries || "  (no tools yet)"}
 ### Existing Prompts (${app.prompts?.length || 0})
 ${promptSummaries || "  (no prompts yet)"}
 
-## What You Can Do
-1. **Create/Edit Tools** — generate backend tool scripts (JS)
-2. **Create/Edit Prompts** — generate prompt templates
-3. **Generate UI Components** — create live React components with Tailwind + shadcn that render instantly in the browser
-
-## Output Formats
-
-### Tool (backend JS script)
-\`\`\`json:tool
-{
-  "name": "tool_name",
-  "description": "What the tool does",
-  "toolClass": "read-only",
-  "params": {
-    "city": { "type": "string", "required": true, "description": "City name", "options": ["London", "Sydney", "Other"] }
-  },
-  "script": "function handle(params) { ... }"
-}
-\`\`\`
-
-### Prompt (markdown template)
-\`\`\`json:prompt
-{
-  "name": "prompt_name",
-  "description": "What this prompt does",
-  "arguments": [{ "name": "arg_name", "description": "What this arg is", "required": true }],
-  "body": "Markdown template with {{variable}} placeholders"
-}
-\`\`\`
-
-### UI Component (live React — renders instantly in browser!)
-\`\`\`tsx:ui
-function WeatherDashboard() {
-  const [city, setCity] = useState("London")
-  const [customCity, setCustomCity] = useState("")
-  const weather = useToolRunner()
-  const ai = usePromptRunner()
-
-  const activeCity = city === "Other" ? customCity : city
-
-  const handleCheck = () => {
-    if (activeCity) weather.run("${app.name}.check_weather", { city: activeCity })
-  }
-
-  const handleAdvice = () => {
-    if (weather.data) {
-      ai.run("Based on this weather data, what should I wear and should I bring an umbrella? " + JSON.stringify(weather.data))
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Cloud size={18} /> Weather</CardTitle>
-        <CardDescription>Select a city and check live conditions</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>City</Label>
-          <Select value={city} onValueChange={setCity}>
-            <SelectTrigger><SelectValue placeholder="Select city..." /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="London">London</SelectItem>
-              <SelectItem value="Sydney">Sydney</SelectItem>
-              <SelectItem value="New York">New York</SelectItem>
-              <SelectItem value="Other">Other...</SelectItem>
-            </SelectContent>
-          </Select>
-          {city === "Other" && (
-            <Input value={customCity} onChange={(e) => setCustomCity(e.target.value)} placeholder="Enter city name..." />
-          )}
-        </div>
-        <Button onClick={handleCheck} disabled={weather.loading || !activeCity} className="w-full">
-          {weather.loading ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Search size={14} className="mr-2" />}
-          Check Weather
-        </Button>
-        {weather.error && <div className="text-sm text-red-500 flex items-center gap-2"><AlertTriangle size={14} />{weather.error}</div>}
-        {weather.data && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 bg-muted rounded-lg">
-                <Thermometer size={20} className="mx-auto mb-1 text-orange-400" />
-                <div className="text-2xl font-bold">{get(weather.data, "temperature", "?")}°C</div>
-              </div>
-              <div className="text-center p-3 bg-muted rounded-lg">
-                <Droplets size={20} className="mx-auto mb-1 text-blue-400" />
-                <div className="text-2xl font-bold">{get(weather.data, "humidity", "?")}%</div>
-              </div>
-              <div className="text-center p-3 bg-muted rounded-lg">
-                <Wind size={20} className="mx-auto mb-1 text-cyan-400" />
-                <div className="text-2xl font-bold">{get(weather.data, "wind", "?")}</div>
-              </div>
-            </div>
-            <Button variant="outline" onClick={handleAdvice} disabled={ai.loading} className="w-full">
-              {ai.loading ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Star size={14} className="mr-2" />}
-              Ask AI for Advice
-            </Button>
-            {ai.error && <div className="text-sm text-red-500 flex items-center gap-2"><AlertTriangle size={14} />{ai.error}</div>}
-            {ai.text && <div className="p-3 bg-muted rounded-lg text-sm whitespace-pre-wrap">{ai.text}</div>}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-\`\`\`
-
-## UI Component Rules
-- Write a single function component (e.g. \`function MyComponent() { ... }\`)
-- DO NOT use import/export — all components and hooks are already in scope
-- Use Tailwind CSS for all styling
-- Use shadcn components (Button, Card, Input, Select, etc.)
-- Use lucide icons (Sun, Cloud, Thermometer, etc.)
-- Make it look polished — use proper spacing, colors, rounded corners
-- **Use useToolRunner() to call backend tools for real data** — don't hardcode mock data
-- **Use usePromptRunner() to get AI analysis/text from Claude** — pass tool results to prompts
-- Tool names use the format "appname.tool_name" (e.g. "${app.name}.check_weather")
-- For conditional fields: use useState to show/hide fields dynamically (e.g. show text input when "Other" is selected)
-- **ALWAYS show error states!** Both useToolRunner and usePromptRunner have an .error field. ALWAYS render it:
-  {tool.error && <div className="text-sm text-red-500 flex items-center gap-2"><AlertTriangle size={14} />{tool.error}</div>}
-  {ai.error && <div className="text-sm text-red-500 flex items-center gap-2"><AlertTriangle size={14} />{ai.error}</div>}
-- Always handle loading and empty states gracefully
-- **CRITICAL: When displaying data from useToolRunner, ALWAYS use get() or str() to safely render values.** Example: {get(tool.data, "temperature", "?")} NOT {tool.data.temperature}. This prevents "Objects are not valid as React child" errors.
-- Use get(obj, "path.to.field", "fallback") for nested access, str(value) for simple coercion
-- When passing data to usePromptRunner, stringify objects: ai.run("Analyze this", { data: JSON.stringify(tool.data) })
-
-${AVAILABLE_COMPONENTS}
-
-${TOOL_NAMING_RULES}
-
-## Tool Script Rules
-- PARAM TYPES: "string" (add "options" for dropdown), "number", "boolean". NEVER use "enum".
-- JS Runtime: http.get/post/put/delete, secrets.get, config.get, log.info/warn/error
-- Use var, not const/let. Use function declarations.
-
-## QA Tools
-For guided flows, add "mode": "qa". Implement chatMode(answers) + formDefinition() + formSubmit(params).
-
-## Important
-- If editing an existing tool, output the FULL tool with the SAME name.
-- When the user asks for UI, ALWAYS generate a \`\`\`tsx:ui block — it renders live!
-- When the user asks for a tool, generate a \`\`\`json:tool block.
-- You can output both in one response (tool for the backend + UI for how it should look).
-
+Tool names use the format "appname.tool_name" (e.g. "${app.name}.check_weather").
 TESTING: Tools available via MCP as "${app.name}.<tool_name>".
+
+---
+
+${reference}
 `
 }
 
@@ -270,6 +133,7 @@ function extractArtifacts(content: string): ExtractedArtifact[] {
 // --- Main Workshop Component ---
 
 export function AIWorkshop({ app }: Props) {
+  const { compose } = useBootstrapPrompts()
   const { messages, isStreaming, send, clear } = useAgentChat()
   const addToolMutation = useAddTool()
   const updateToolMutation = useUpdateTool()
@@ -297,7 +161,7 @@ export function AIWorkshop({ app }: Props) {
     if (!input.trim() || isStreaming) return
     const userText = input.trim()
     const prompt = messages.length === 0
-      ? buildSystemPrompt(app) + "\n\nUser request: " + userText
+      ? buildSystemPrompt(compose, app) + "\n\nUser request: " + userText
       : userText
     send(prompt, userText)
     setInput("")

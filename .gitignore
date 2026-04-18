@@ -54,6 +54,7 @@ apps/nube_agent/windows/flutter/ephemeral/
 *.iml
 
 # Bizzy runtime data
+data/
 data/bizzy.db
 data/bizzy.db-shm
 data/bizzy.db-wal
@@ -70,3 +71,4 @@ plugins/starter-plugin/bizzy-starter-plugin
 mcpdemo/Makefile
 data/bizzy.db-shm
 data/bizzy.db-wal
+gemma4-e4b-code.Modelfile

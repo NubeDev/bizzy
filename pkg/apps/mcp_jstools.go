@@ -41,6 +41,11 @@ func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.A
 	}
 
 	runtime := NewJSRuntime(app, secrets, config, timeout)
+	if f.pluginQuery != nil {
+		runtime.SetPluginQuery(f.pluginQuery)
+	}
+	// Wire same-app tool calling: tools.call("other_tool", params)
+	runtime.SetToolCaller(&sameAppToolCaller{runtime: runtime, manifests: manifests})
 
 	for _, m := range manifests {
 		manifest := m // capture
@@ -97,6 +102,30 @@ func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.A
 			f.registerQAPrompt(srv, app, manifest)
 		}
 	}
+}
+
+// sameAppToolCaller implements ToolCaller by executing tools within the same
+// app's JSRuntime. This lets tools.call("other_tool", params) work without
+// crossing app boundaries.
+type sameAppToolCaller struct {
+	runtime   *JSRuntime
+	manifests []ToolManifest
+}
+
+func (c *sameAppToolCaller) CallTool(toolName string, params map[string]any) (map[string]any, error) {
+	for _, m := range c.manifests {
+		if m.Name != toolName {
+			continue
+		}
+		if m.Script != "" {
+			return c.runtime.ExecuteScript(m.Script, "", params)
+		}
+		if m.ScriptPath != "" {
+			return c.runtime.Execute(m.ScriptPath, params)
+		}
+		return nil, fmt.Errorf("tool %s has no script", toolName)
+	}
+	return nil, fmt.Errorf("tool %s not found in this app", toolName)
 }
 
 func buildToolSchema(m ToolManifest) jsonschema.Schema {

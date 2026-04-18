@@ -42,8 +42,11 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 	if err := pluginReg.Start(); err != nil {
 		log.Printf("[plugins] failed to start registry: %v", err)
 	} else {
+		bridge := plugin.NewMCPBridge(pluginReg)
 		a.PluginRegistry = pluginReg
-		a.MCPFactory.SetPluginSource(plugin.NewMCPBridge(pluginReg))
+		a.MCPFactory.SetPluginSource(bridge)
+		a.MCPFactory.SetPluginQuery(bridge)
+		toolSvc.PluginQuery = bridge
 		fmt.Fprintf(os.Stderr, "[nube-server] plugin system: enabled\n")
 	}
 

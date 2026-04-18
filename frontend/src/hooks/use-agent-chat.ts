@@ -18,13 +18,21 @@ interface AgentEvent {
   cost_usd?: number
 }
 
-export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMessage[]; initialClaudeSessionId?: string }) {
+export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMessage[]; initialClaudeSessionId?: string; provider?: string; model?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>(opts?.initialMessages || [])
   const [isStreaming, setIsStreaming] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   // Claude CLI session ID — used for --resume on subsequent messages
   const claudeSessionRef = useRef<string | null>(opts?.initialClaudeSessionId || null)
   const appNameRef = useRef(opts?.appName)
+  const providerRef = useRef(opts?.provider)
+  const modelRef = useRef(opts?.model)
+
+  // Keep refs in sync when opts change
+  useEffect(() => {
+    providerRef.current = opts?.provider
+    modelRef.current = opts?.model
+  }, [opts?.provider, opts?.model])
 
   // When initialMessages arrives async (after API fetch), update state.
   // useState only uses the initial value on first mount — this handles late arrivals.
@@ -85,13 +93,19 @@ export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMe
         case 'session':
           setSessionId(ev.session_id)
           updateLastAssistant({ status: 'thinking' })
-          // Send prompt + Claude session ID for resume + agent name for history tagging
+          // Send prompt + provider/model + Claude session ID for resume + agent name for history tagging
           const req: Record<string, string> = { prompt: promptToSend }
           if (resumeId) {
             req.session_id = resumeId
           }
           if (appNameRef.current) {
             req.agent = appNameRef.current
+          }
+          if (providerRef.current) {
+            req.provider = providerRef.current
+          }
+          if (modelRef.current) {
+            req.model = modelRef.current
           }
           ws.send(JSON.stringify(req))
           break

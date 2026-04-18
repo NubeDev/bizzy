@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 
@@ -202,6 +203,17 @@ func providerUnavailableReason(name string, runner airunner.Runner) string {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:11434/api/tags", nil)
 		if _, err := http.DefaultClient.Do(req); err != nil {
 			return "ollama not reachable — is it running? (ollama serve)"
+		}
+	case "opencode":
+		if _, err := exec.LookPath("opencode"); err != nil {
+			// Check default install location.
+			home, _ := os.UserHomeDir()
+			if home != "" {
+				if _, err := os.Stat(home + "/.opencode/bin/opencode"); err == nil {
+					return "" // Found at default location, it's available.
+				}
+			}
+			return "opencode CLI not found — install with: curl -fsSL https://opencode.ai/install | bash"
 		}
 	case "openai":
 		return "OPENAI_API_KEY not configured"

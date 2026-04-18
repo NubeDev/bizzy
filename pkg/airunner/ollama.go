@@ -154,7 +154,7 @@ func (r *OllamaRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 
 	model := cfg.Model
 	if model == "" {
-		model = "gemma3" // sensible default
+		model = "gemma4:e4b-code"
 	}
 	result.Model = model
 

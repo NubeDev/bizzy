@@ -128,6 +128,24 @@ func (r *Registry) GetPlugin(name string) (PluginState, bool) {
 	return *p, true
 }
 
+// ActivePluginsByService returns active plugins that declare the given service type.
+// If serviceFilter is empty, all active plugins are returned.
+func (r *Registry) ActivePluginsByService(serviceFilter string) []PluginState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]PluginState, 0, len(r.plugins))
+	for _, p := range r.plugins {
+		if p.Status != "active" {
+			continue
+		}
+		if serviceFilter != "" && !p.Manifest.HasService(ServiceType(serviceFilter)) {
+			continue
+		}
+		out = append(out, *p)
+	}
+	return out
+}
+
 // ActiveTools returns all tools from active plugins, namespaced as
 // "plugin.<pluginName>.<toolName>".
 func (r *Registry) ActiveTools() []NamespacedTool {

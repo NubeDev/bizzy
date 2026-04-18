@@ -133,6 +133,13 @@ export interface CreateAppRequest {
   color?: string
 }
 
+export interface BootstrapPrompt {
+  name: string
+  description: string
+  arguments?: { name: string; description: string; required: boolean }[]
+  body: string
+}
+
 export interface PluginSummary {
   name: string
   version: string

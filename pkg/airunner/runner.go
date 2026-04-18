@@ -1,5 +1,5 @@
 // Package airunner provides a unified interface for running AI providers
-// (Claude Code CLI, Ollama, OpenAI, Anthropic, Gemini, Codex, Copilot)
+// (Claude Code CLI, Ollama, OpenAI, Anthropic, Gemini, Codex, Copilot, OpenCode)
 // and streaming their output as typed events.
 package airunner
 
@@ -16,6 +16,7 @@ const (
 	ProviderGemini    Provider = "gemini"
 	ProviderCodex     Provider = "codex"
 	ProviderCopilot   Provider = "copilot"
+	ProviderOpenCode  Provider = "opencode"
 )
 
 // HistoryMessage is a single message in a conversation history,

@@ -25,10 +25,10 @@ type API struct {
 	DB          *gorm.DB
 	AppRegistry *apps.Registry
 	MCPFactory  *apps.MCPFactory
-	Runners        *airunner.Registry                          // AI providers (claude, ollama, openai, etc.)
-	Jobs           *airunner.JobStore                          // In-memory async job store
+	Runners     *airunner.Registry // AI providers (claude, ollama, openai, etc.)
+	Jobs        *airunner.JobStore // In-memory async job store
 
-	Memory         *memory.Store                                  // Server + per-user memory
+	Memory *memory.Store // Server + per-user memory
 
 	// Workflow engine.
 	Workflows     *workflow.Runner
@@ -149,6 +149,10 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.GET("/my/prompts", a.listMyPrompts)
 	authed.GET("/my/prompts/:name", a.getPrompt)
 
+	// Bootstrap prompts — built-in reference docs, no app install required.
+	authed.GET("/api/bootstrap/prompts", a.listBootstrapPrompts)
+	authed.GET("/api/bootstrap/prompts/:name", a.getBootstrapPrompt)
+
 	// Memory API.
 	authed.GET("/api/memory/me", a.getMyMemory)
 	authed.PUT("/api/memory/me", a.setMyMemory)
@@ -225,6 +229,8 @@ func (a *API) SetupRouter() *gin.Engine {
 	}
 
 	// --- Plugins ---
+	// Upload always available (DB only); other routes require the NATS plugin system.
+	admin.POST("/api/plugins/upload", a.uploadPlugin)
 	if a.PluginRegistry != nil {
 		plugins := admin.Group("/api/plugins")
 		plugins.GET("", a.listPlugins)
@@ -282,6 +288,8 @@ func (a *API) SetupRouter() *gin.Engine {
 	myApps.DELETE("/:id/chat", a.deleteBuilderChat)
 	myApps.POST("/:id/publish", a.publishStoreApp)
 	myApps.PATCH("/:id/visibility", a.setStoreAppVisibility)
+
+	myApps.POST("/upload", a.uploadStoreApp)
 
 	myApps.POST("/:id/share", a.shareStoreApp)
 	myApps.POST("/:id/share-link", a.shareStoreAppLink)
