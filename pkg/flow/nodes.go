@@ -54,7 +54,7 @@ func executeCondition(_ context.Context, ec *ExecContext) (any, error) {
 	}
 
 	env := buildExprEnv(ec.Inputs, nil)
-	result, err := evalExpr(exprStr, env)
+	result, err := evalExpr(exprStr, env, ec.JSRuntime())
 	if err != nil {
 		return nil, fmt.Errorf("condition node %s: %w", ec.Node.ID, err)
 	}
@@ -72,7 +72,7 @@ func executeSwitch(_ context.Context, ec *ExecContext) (any, error) {
 	}
 
 	env := buildExprEnv(ec.Inputs, nil)
-	result, err := evalExpr(exprStr, env)
+	result, err := evalExpr(exprStr, env, ec.JSRuntime())
 	if err != nil {
 		return nil, fmt.Errorf("switch node %s: %w", ec.Node.ID, err)
 	}
@@ -310,7 +310,7 @@ func executeTransform(_ context.Context, ec *ExecContext) (any, error) {
 	}
 
 	env := buildExprEnv(ec.Inputs, ec.Run.Variables)
-	result, err := evalExpr(exprStr, env)
+	result, err := evalExpr(exprStr, env, ec.JSRuntime())
 	if err != nil {
 		return nil, fmt.Errorf("transform node %s: %w", ec.Node.ID, err)
 	}
@@ -345,20 +345,11 @@ func executeCounter(_ context.Context, ec *ExecContext) (any, error) {
 	step := getIntOrDefault(ec.Node.Data, "step", 1)
 	initial := getIntOrDefault(ec.Node.Data, "initial", 0)
 
-	if ec.Run.Variables == nil {
-		ec.Run.Variables = make(map[string]any)
-	}
-
-	// Read current value from flow variables, or use initial.
+	// Read current value from flow-level persistent state (survives across runs).
 	current := initial
-	if v, ok := ec.Run.Variables[varName]; ok {
-		switch n := v.(type) {
-		case int:
-			current = n
-		case float64:
-			current = int(n)
-		case int64:
-			current = int(n)
+	if ec.Engine != nil {
+		if v, ok := ec.Engine.GetFlowState(ec.Run.FlowID, varName); ok {
+			current = toInt(v, initial)
 		}
 	}
 
@@ -371,19 +362,34 @@ func executeCounter(_ context.Context, ec *ExecContext) (any, error) {
 		current = initial
 	case "set":
 		if v, ok := ec.Inputs["input"]; ok {
-			switch n := v.(type) {
-			case int:
-				current = n
-			case float64:
-				current = int(n)
-			case int64:
-				current = int(n)
-			}
+			current = toInt(v, initial)
 		}
 	}
 
+	// Write back to persistent flow state.
+	if ec.Engine != nil {
+		ec.Engine.SetFlowState(ec.Run.FlowID, varName, current)
+	}
+
+	// Also store in run variables for visibility in the run result.
+	if ec.Run.Variables == nil {
+		ec.Run.Variables = make(map[string]any)
+	}
 	ec.Run.Variables[varName] = current
+
 	return map[string]any{"value": current, "variable": varName}, nil
+}
+
+func toInt(v any, fallback int) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	case int64:
+		return int(n)
+	}
+	return fallback
 }
 
 // --- Helpers ---

@@ -275,6 +275,9 @@ func (a *API) SetupRouter() *gin.Engine {
 		flowRuns.POST("/:runId/approve/:nodeId", a.approveFlowNode)
 		flowRuns.POST("/:runId/reject/:nodeId", a.rejectFlowNode)
 		flowRuns.POST("/:runId/cancel", a.cancelFlowRun)
+
+		// Webhook trigger endpoint (unauthenticated — flows validate via path).
+		r.POST("/hooks/flow/:path", a.handleFlowWebhook)
 	}
 
 	// --- App Store ---

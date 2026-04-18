@@ -29,6 +29,13 @@ type Engine struct {
 	// Active run tracking.
 	mu      sync.RWMutex
 	cancels map[string]context.CancelFunc // runID -> cancel
+
+	// Webhook trigger dispatch table.
+	webhookMu sync.RWMutex
+	webhooks  map[string]func(inputs map[string]any) // path -> onTrigger
+
+	// Event trigger subscriber (set when NATS bus is available).
+	eventSub EventSubscriber
 }
 
 // NewEngine creates a flow execution engine with all built-in executors registered.
@@ -46,6 +53,7 @@ func NewEngine(store *Store, registry *NodeTypeRegistry) *Engine {
 		MaxParallelNodes: 50,
 		MaxRunsPerUser:   10,
 		cancels:          make(map[string]context.CancelFunc),
+		webhooks:         make(map[string]func(inputs map[string]any)),
 	}
 	RegisterBuiltinTriggers(e)
 	return e
@@ -72,6 +80,9 @@ func (e *Engine) SetServices(s *Services) {
 	if s.Bus != nil {
 		e.services.Bus = s.Bus
 		e.events = eventEmitter{bus: s.Bus}
+	}
+	if s.JSFactory != nil {
+		e.services.JSFactory = s.JSFactory
 	}
 }
 
@@ -104,6 +115,94 @@ func (e *Engine) SetSlack(slack SlackSender) {
 // SetEmail sets the email sender for email-send nodes.
 func (e *Engine) SetEmail(email EmailSender) {
 	e.services.Email = email
+}
+
+// SetEventSubscriber sets the NATS subscriber for event-triggered flows.
+func (e *Engine) SetEventSubscriber(sub EventSubscriber) {
+	e.eventSub = sub
+}
+
+// SetJSFactory sets the JS runtime factory for expression evaluation.
+// When set, condition/switch/transform nodes get user-scoped runtimes
+// with secrets, config, plugins, and tool calling.
+func (e *Engine) SetJSFactory(factory JSRuntimeFactory) {
+	e.services.JSFactory = factory
+}
+
+// RegisterAppTools scans an app registry and registers each app tool as a
+// draggable flow node type (tool:appName.toolName). Input ports are generated
+// from the tool's parameter definitions. The executor for tool:* prefix is
+// already registered — this only adds the node type metadata for the palette.
+func (e *Engine) RegisterAppTools(appRegistry AppToolSource) int {
+	registered := 0
+	for _, appInfo := range appRegistry.ListApps() {
+		for _, tool := range appRegistry.AppTools(appInfo.Name) {
+			nodeType := "tool:" + appInfo.Name + "." + tool.Name
+
+			var inputs []PortDef
+			for pName, pDef := range tool.Params {
+				inputs = append(inputs, PortDef{
+					Handle:   pName,
+					Label:    pName,
+					Type:     toolParamTypeToPort(pDef.Type),
+					Required: pDef.Required,
+				})
+			}
+
+			e.registry.Register(NodeTypeDef{
+				Type:        nodeType,
+				Label:       tool.Name,
+				Description: tool.Description,
+				Category:    "tool",
+				Source:      "app:" + appInfo.Name,
+				Ports: PortsDef{
+					Inputs: inputs,
+					Outputs: []PortDef{
+						{Handle: "result", Label: "Result", Type: "any"},
+						{Handle: "error", Label: "Error", Type: "string"},
+					},
+				},
+			})
+			registered++
+		}
+	}
+	return registered
+}
+
+// AppToolInfo describes an app for tool registration.
+type AppToolInfo struct {
+	Name string
+}
+
+// AppToolManifest describes a tool for flow node registration.
+type AppToolManifest struct {
+	Name        string
+	Description string
+	Params      map[string]AppToolParam
+}
+
+// AppToolParam describes a tool parameter.
+type AppToolParam struct {
+	Type     string
+	Required bool
+}
+
+// AppToolSource provides app and tool listings for dynamic registration.
+type AppToolSource interface {
+	ListApps() []AppToolInfo
+	AppTools(appName string) []AppToolManifest
+}
+
+// toolParamTypeToPort maps tool param types to port types.
+func toolParamTypeToPort(t string) string {
+	switch t {
+	case "number":
+		return "number"
+	case "boolean":
+		return "bool"
+	default:
+		return "string"
+	}
 }
 
 // Executors returns the executor registry for registering custom node types.

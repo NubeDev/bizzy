@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/adapters"
+	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/adapters/cron"
 	gmailadapter "github.com/NubeDev/bizzy/pkg/adapters/gmail"
 	slackadapter "github.com/NubeDev/bizzy/pkg/adapters/slack"
@@ -16,7 +17,9 @@ import (
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/bus"
 	"github.com/NubeDev/bizzy/pkg/command"
+	"github.com/NubeDev/bizzy/pkg/flow"
 	"github.com/NubeDev/bizzy/pkg/notify"
+	"github.com/nats-io/nats.go"
 	"github.com/NubeDev/bizzy/pkg/plugin"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"gorm.io/gorm"
@@ -36,6 +39,7 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 	// Wire event bus into flow engine.
 	if a.FlowEngine != nil {
 		a.FlowEngine.SetBus(eventBus)
+		a.FlowEngine.SetEventSubscriber(&busEventSubscriber{bus: eventBus})
 		a.FlowEngine.RecoverRuns()
 	}
 
@@ -52,6 +56,14 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 		a.MCPFactory.SetPluginSource(bridge)
 		a.MCPFactory.SetPluginQuery(bridge)
 		toolSvc.PluginQuery = bridge
+		// Upgrade flow JS factory with plugin access.
+		if a.FlowEngine != nil {
+			a.FlowEngine.SetJSFactory(func(userID string) *apps.JSRuntime {
+				rt := apps.NewFlowRuntime(10 * time.Second)
+				rt.SetPluginQuery(bridge)
+				return rt
+			})
+		}
 		fmt.Fprintf(os.Stderr, "[nube-server] plugin system: enabled\n")
 	}
 
@@ -65,6 +77,7 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 			AgentSvc: agentSvc,
 			Jobs:     agentSvc.Jobs,
 		},
+		Flows:    &commandFlowBridge{engine: a.FlowEngine},
 		Lister:   &api.CommandToolLister{ToolSvc: toolSvc},
 		Bus:      eventBus,
 		Adapters: adapterRegistry,
@@ -142,4 +155,40 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 		}
 		eventBus.Close()
 	}, nil
+}
+
+// busEventSubscriber adapts bus.Bus to flow.EventSubscriber.
+type busEventSubscriber struct {
+	bus *bus.Bus
+}
+
+func (s *busEventSubscriber) Subscribe(pattern string, handler func(data []byte)) (func(), error) {
+	sub, err := s.bus.Subscribe(pattern, func(msg *nats.Msg) {
+		handler(msg.Data)
+		msg.Ack()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return func() { sub.Unsubscribe() }, nil
+}
+
+// commandFlowBridge adapts the flow engine to command.FlowExecutor.
+type commandFlowBridge struct {
+	engine *flow.Engine
+}
+
+func (b *commandFlowBridge) RunFlow(ctx context.Context, userID, flowName string, inputs map[string]any) (string, error) {
+	if b.engine == nil {
+		return "", fmt.Errorf("flow engine not available")
+	}
+	def, err := b.engine.Store().GetFlowByName(flowName)
+	if err != nil {
+		return "", fmt.Errorf("flow %q not found: %w", flowName, err)
+	}
+	run, err := b.engine.StartRun(ctx, def.ID, userID, inputs, nil)
+	if err != nil {
+		return "", err
+	}
+	return run.ID, nil
 }

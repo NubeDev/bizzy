@@ -144,25 +144,19 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
-  // Merge execution state (status, values) into nodes when polling updates.
-  // Only creates new node objects when data actually changed to prevent wobble.
-  const prevStatesJson = useRef('')
+  // Merge execution state into nodes when polling updates.
+  // Compares by JSON to avoid creating new node objects when nothing changed.
+  const prevNodeStatesJson = useRef<Record<string, string>>({})
   useEffect(() => {
-    const json = JSON.stringify(nodeStates || {})
-    if (json === prevStatesJson.current) return
-    prevStatesJson.current = json
-    setNodes((nds) =>
-      nds.map((n) => {
-        const state = nodeStates?.[n.id]
-        const d = n.data as BaseNodeData
-        // Skip update if nothing changed for this node
-        if (
-          d.status === (state?.status ?? undefined) &&
-          d.error === (state?.error ?? undefined) &&
-          d.duration_ms === (state?.duration_ms ?? undefined) &&
-          d.inputValue === (state?.input ?? undefined) &&
-          d.outputValue === (state?.output ?? undefined)
-        ) return n
+    if (!nodeStates) return
+    setNodes((nds) => {
+      let changed = false
+      const next = nds.map((n) => {
+        const state = nodeStates[n.id]
+        const stateJson = state ? JSON.stringify(state) : ''
+        if (stateJson === (prevNodeStatesJson.current[n.id] || '')) return n
+        prevNodeStatesJson.current[n.id] = stateJson
+        changed = true
         return {
           ...n,
           data: {
@@ -174,8 +168,9 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
             outputValue: state?.output,
           },
         }
-      }),
-    )
+      })
+      return changed ? next : nds
+    })
   }, [nodeStates, setNodes])
 
   // Expose handle to parent

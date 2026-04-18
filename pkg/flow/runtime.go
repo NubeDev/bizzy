@@ -26,6 +26,8 @@ type deployment struct {
 	def     *FlowDef
 	handler TriggerHandler
 	cancel  context.CancelFunc
+	state   map[string]any // persistent in-memory state across runs (like PLC retain vars)
+	stateMu sync.RWMutex
 }
 
 // runtime manages the deploy/undeploy lifecycle for flows.
@@ -62,7 +64,7 @@ func (e *Engine) Deploy(ctx context.Context, def *FlowDef) error {
 		e.stopDeployment(existing)
 	}
 
-	dep := &deployment{def: def}
+	dep := &deployment{def: def, state: make(map[string]any)}
 
 	// Read trigger config from the trigger node's Data map.
 	triggerData := def.TriggerConfig()
@@ -166,6 +168,51 @@ func (e *Engine) Shutdown() {
 		delete(e.runtime.deployments, id)
 	}
 	log.Println("[flow] runtime shutdown: all flows undeployed")
+}
+
+// GetFlowState reads a value from a flow's persistent in-memory state.
+// Returns (value, true) if found, (nil, false) if not.
+func (e *Engine) GetFlowState(flowID, key string) (any, bool) {
+	e.runtime.mu.RLock()
+	dep, ok := e.runtime.deployments[flowID]
+	e.runtime.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	dep.stateMu.RLock()
+	defer dep.stateMu.RUnlock()
+	v, ok := dep.state[key]
+	return v, ok
+}
+
+// SetFlowState writes a value to a flow's persistent in-memory state.
+func (e *Engine) SetFlowState(flowID, key string, value any) {
+	e.runtime.mu.RLock()
+	dep, ok := e.runtime.deployments[flowID]
+	e.runtime.mu.RUnlock()
+	if !ok {
+		return
+	}
+	dep.stateMu.Lock()
+	dep.state[key] = value
+	dep.stateMu.Unlock()
+}
+
+// GetFlowStateAll returns a snapshot of a flow's entire state map.
+func (e *Engine) GetFlowStateAll(flowID string) map[string]any {
+	e.runtime.mu.RLock()
+	dep, ok := e.runtime.deployments[flowID]
+	e.runtime.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	dep.stateMu.RLock()
+	defer dep.stateMu.RUnlock()
+	snapshot := make(map[string]any, len(dep.state))
+	for k, v := range dep.state {
+		snapshot[k] = v
+	}
+	return snapshot
 }
 
 func (e *Engine) stopDeployment(dep *deployment) {

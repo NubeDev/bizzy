@@ -132,6 +132,7 @@ export function FlowEditorPage() {
         {selectedNode && (
           <NodeConfig
             node={selectedNode}
+            nodeTypeDefs={nodeTypeDefs}
             onChange={handleNodeConfigChange}
             onClose={() => setSelectedNode(null)}
           />

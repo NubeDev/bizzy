@@ -10,15 +10,20 @@ import (
 // The env keys become top-level properties accessible in the expression.
 // Supports simple expressions ("input.value > 5") and full functions
 // ("function handle(params) { return params.input * 2 }").
-func evalExpr(expression string, env map[string]any) (any, error) {
-	rt := apps.NewFlowRuntime(5 * time.Second)
+//
+// If rt is non-nil it is used directly (user-scoped runtime with secrets,
+// config, plugins). Otherwise a bare flow runtime is created.
+func evalExpr(expression string, env map[string]any, rt *apps.JSRuntime) (any, error) {
+	if rt == nil {
+		rt = apps.NewFlowRuntime(5 * time.Second)
+	}
 	return rt.EvalExpression(expression, env)
 }
 
 // evalCondition evaluates an expression and returns whether the condition edge should fire.
 func evalCondition(condition string, value any) bool {
 	env := map[string]any{"value": value}
-	result, err := evalExpr(condition, env)
+	result, err := evalExpr(condition, env, nil)
 	if err != nil {
 		return false
 	}

@@ -45,6 +45,15 @@ type ExecContext struct {
 	Engine *Engine
 }
 
+// JSRuntime returns a user-scoped JSRuntime via the factory, or nil if no
+// factory is configured (callers fall back to a bare runtime).
+func (ec *ExecContext) JSRuntime() *apps.JSRuntime {
+	if ec.Services != nil && ec.Services.JSFactory != nil {
+		return ec.Services.JSFactory(ec.Run.UserID)
+	}
+	return nil
+}
+
 // JSRuntimeFactory creates a JSRuntime scoped to a user. When wired with
 // the app ecosystem, it returns a runtime with secrets, config, plugins, and
 // tool calling. When nil, the engine falls back to a bare NewFlowRuntime.

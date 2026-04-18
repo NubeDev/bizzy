@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/api"
@@ -97,6 +98,16 @@ func main() {
 	flowEngine.SetTools(toolSvc)
 	flowEngine.SetPrompts(promptRunner)
 	flowEngine.SetAgents(runners)
+	flowEngine.SetJSFactory(func(userID string) *apps.JSRuntime {
+		rt := apps.NewFlowRuntime(10 * time.Second)
+		return rt
+	})
+
+	// Register app tools as draggable flow nodes.
+	toolCount := flowEngine.RegisterAppTools(&appToolBridge{registry: registry})
+	if toolCount > 0 {
+		fmt.Fprintf(os.Stderr, "[nube-server] flow engine: registered %d app tools as nodes\n", toolCount)
+	}
 
 	a := &api.API{
 		DB:          db,
@@ -143,4 +154,35 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
+}
+
+// appToolBridge adapts apps.Registry to flow.AppToolSource.
+type appToolBridge struct {
+	registry *apps.Registry
+}
+
+func (b *appToolBridge) ListApps() []flow.AppToolInfo {
+	appList := b.registry.List()
+	out := make([]flow.AppToolInfo, len(appList))
+	for i, a := range appList {
+		out[i] = flow.AppToolInfo{Name: a.Name}
+	}
+	return out
+}
+
+func (b *appToolBridge) AppTools(appName string) []flow.AppToolManifest {
+	tools := b.registry.GetTools(appName)
+	out := make([]flow.AppToolManifest, len(tools))
+	for i, t := range tools {
+		params := make(map[string]flow.AppToolParam, len(t.Params))
+		for k, v := range t.Params {
+			params[k] = flow.AppToolParam{Type: v.Type, Required: v.Required}
+		}
+		out[i] = flow.AppToolManifest{
+			Name:        t.Name,
+			Description: t.Description,
+			Params:      params,
+		}
+	}
+	return out
 }

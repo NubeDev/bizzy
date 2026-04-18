@@ -46,7 +46,7 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'min-w-[140px] max-w-[220px] rounded border shadow-sm',
+        'min-w-[140px] rounded border shadow-sm',
         colorClass,
         statusClass,
         selected && 'ring-2 ring-primary',
@@ -85,20 +85,16 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
         />
       ))}
 
-      {/* Port labels with inline values */}
+      {/* Port labels */}
       {(d.inputPorts?.length || 0) > 0 && (
         <div className="px-2.5 pb-1 space-y-0.5">
           {d.inputPorts?.map((port) => (
-            <div key={port.handle} className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', d.inputValue != null ? 'bg-green-500' : 'bg-muted-foreground/30')} />
-              {port.label || port.handle}
-              {port.required && <span className="text-red-400">*</span>}
-              {d.inputValue != null && (
-                <span className="ml-auto text-[9px] font-mono text-foreground/50 truncate max-w-[80px]" title={formatFull(d.inputValue)}>
-                  {formatCompact(d.inputValue)}
-                </span>
-              )}
-            </div>
+            <PortLabel
+              key={port.handle}
+              port={port}
+              side="input"
+              value={d.inputValue}
+            />
           ))}
         </div>
       )}
@@ -106,15 +102,12 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
       {(d.outputPorts?.length || 0) > 0 && (
         <div className="px-2.5 pb-1 space-y-0.5">
           {d.outputPorts?.map((port) => (
-            <div key={port.handle} className="text-[10px] text-muted-foreground flex items-center gap-1">
-              {d.outputValue != null && (
-                <span className="text-[9px] font-mono text-foreground/50 truncate max-w-[80px]" title={formatFull(d.outputValue)}>
-                  {formatCompact(d.outputValue)}
-                </span>
-              )}
-              <span className="ml-auto">{port.label || port.handle}</span>
-              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', d.outputValue != null ? 'bg-green-500' : 'bg-muted-foreground/30')} />
-            </div>
+            <PortLabel
+              key={port.handle}
+              port={port}
+              side="output"
+              value={d.outputValue}
+            />
           ))}
         </div>
       )}
@@ -141,24 +134,44 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
   )
 })
 
-function formatCompact(value: unknown): string {
-  if (value == null) return 'null'
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (typeof value === 'string') return value.length > 16 ? value.slice(0, 16) + '\u2026' : value
-  if (Array.isArray(value)) return `[${value.length}]`
-  if (typeof value === 'object') {
-    const keys = Object.keys(value as Record<string, unknown>)
-    if (keys.length === 1) {
-      const v = (value as Record<string, unknown>)[keys[0]]
-      const vs = typeof v === 'number' || typeof v === 'boolean' ? String(v) : typeof v === 'string' && v.length <= 8 ? v : '\u2026'
-      return `${keys[0]}: ${vs}`
-    }
-    return `{${keys.length}}`
-  }
-  return String(value)
+function PortLabel({ port, side, value }: { port: FlowPortDef; side: 'input' | 'output'; value?: unknown }) {
+  const hasValue = value != null
+  const isInput = side === 'input'
+
+  return (
+    <div className={cn('group relative text-[10px] text-muted-foreground flex items-center gap-1', !isInput && 'justify-end')}>
+      {isInput && (
+        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', hasValue ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+      )}
+      {port.label || port.handle}
+      {isInput && port.required && <span className="text-red-400">*</span>}
+      {!isInput && (
+        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', hasValue ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+      )}
+
+      {/* Hover tooltip */}
+      {hasValue && (
+        <div className={cn(
+          'absolute z-50 hidden group-hover:block',
+          'bg-popover border border-border rounded shadow-lg p-2',
+          'min-w-[180px] max-w-[320px]',
+          isInput ? 'left-0 top-full mt-1' : 'right-0 top-full mt-1',
+        )}>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+            {side}
+          </div>
+          <pre className="text-[10px] font-mono text-foreground whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
+            {formatValue(value)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
 }
 
-function formatFull(value: unknown): string {
+function formatValue(value: unknown): string {
+  if (value == null) return 'null'
   if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value, null, 2)
 }

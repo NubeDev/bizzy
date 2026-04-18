@@ -238,3 +238,19 @@ func (a *API) validateFlow(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"valid": true, "errors": []string{}})
 }
+
+// --- Webhook trigger ---
+
+func (a *API) handleFlowWebhook(c *gin.Context) {
+	path := c.Param("path")
+
+	var body map[string]any
+	// Best-effort JSON parse; non-JSON requests get an empty body.
+	c.ShouldBindJSON(&body)
+
+	if !a.FlowEngine.HandleWebhook(path, body) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no flow registered for this webhook path"})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"status": "triggered", "path": path})
+}

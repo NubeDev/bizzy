@@ -22,6 +22,12 @@ type AgentExecutor interface {
 	RunJob(userID, prompt, provider, model string) string
 }
 
+// FlowExecutor abstracts the flow engine for the command bus.
+type FlowExecutor interface {
+	// RunFlow starts a flow by name and returns the run ID.
+	RunFlow(ctx context.Context, userID, flowName string, inputs map[string]any) (runID string, err error)
+}
+
 // ToolLister lists available tools and prompts for a user.
 type ToolLister interface {
 	ListTools(userID string) []ToolInfo
@@ -47,7 +53,8 @@ type RouterConfig struct {
 	Parser   *Parser
 	Tools    ToolExecutor
 	Agents   AgentExecutor
-	Lister   ToolLister // optional — enables list tools/prompts
+	Flows    FlowExecutor // optional — enables run flow/<name>
+	Lister   ToolLister   // optional — enables list tools/prompts
 	Bus      *bus.Bus
 	Adapters AdapterRegistry
 }
@@ -58,6 +65,7 @@ type Router struct {
 	parser   *Parser
 	tools    ToolExecutor
 	agents   AgentExecutor
+	flows    FlowExecutor
 	lister   ToolLister
 	bus      *bus.Bus
 	adapters AdapterRegistry
@@ -71,6 +79,7 @@ func NewRouter(cfg RouterConfig) *Router {
 		parser:   cfg.Parser,
 		tools:    cfg.Tools,
 		agents:   cfg.Agents,
+		flows:    cfg.Flows,
 		lister:   cfg.Lister,
 		bus:      cfg.Bus,
 		adapters: cfg.Adapters,
@@ -158,6 +167,8 @@ func (r *Router) executeRun(ctx context.Context, cmd Command) (Result, error) {
 		return r.runTool(ctx, cmd)
 	case "ai":
 		return r.runAI(ctx, cmd)
+	case "flow":
+		return r.runFlow(ctx, cmd)
 	default:
 		return Result{}, fmt.Errorf("unknown target kind: %s", cmd.Target.Kind)
 	}
@@ -169,6 +180,21 @@ func (r *Router) runTool(ctx context.Context, cmd Command) (Result, error) {
 		return Result{}, fmt.Errorf("call tool: %w", err)
 	}
 	return Result{Output: output}, nil
+}
+
+func (r *Router) runFlow(ctx context.Context, cmd Command) (Result, error) {
+	if r.flows == nil {
+		return Result{}, fmt.Errorf("flow engine not configured")
+	}
+	runID, err := r.flows.RunFlow(ctx, cmd.UserID, cmd.Target.Name, cmd.Params)
+	if err != nil {
+		return Result{}, fmt.Errorf("run flow: %w", err)
+	}
+	return Result{
+		ID:      runID,
+		Message: fmt.Sprintf("Flow %s started (run %s)", cmd.Target.Name, runID),
+		Async:   true,
+	}, nil
 }
 
 func (r *Router) runAI(ctx context.Context, cmd Command) (Result, error) {
@@ -231,6 +257,7 @@ func (r *Router) executeApproval(ctx context.Context, cmd Command) (Result, erro
 func (r *Router) executeHelp(ctx context.Context, cmd Command) (Result, error) {
 	help := `Available commands:
   run tool/name [--param value]     Run a tool
+  run flow/name [--param value]     Run a flow
   ask "prompt"                      Ask AI a question
   list tools                        List available tools
   list prompts                      List available prompts
@@ -238,6 +265,7 @@ func (r *Router) executeHelp(ctx context.Context, cmd Command) (Result, error) {
 
 Examples:
   run tool/query_nodes --filter type=sensor
+  run flow/daily-report
   ask "which devices are offline?"
   list tools`
 
