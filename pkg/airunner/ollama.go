@@ -108,6 +108,7 @@ type ollamaChatRequest struct {
 type ollamaMessage struct {
 	Role      string           `json:"role"`    // "system", "user", "assistant", "tool"
 	Content   string           `json:"content"`
+	Images    []string         `json:"images,omitempty"`     // base64-encoded images for vision models
 	ToolCalls []ollamaToolCall `json:"tool_calls,omitempty"`
 }
 
@@ -173,8 +174,14 @@ func (r *OllamaRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 			messages = append(messages, ollamaMessage{Role: "system", Content: cfg.SystemPrompt})
 		}
 	}
-	// Always append the new user message
-	messages = append(messages, ollamaMessage{Role: "user", Content: cfg.Prompt})
+	// Always append the new user message, with images if attached.
+	userMsg := ollamaMessage{Role: "user", Content: cfg.Prompt}
+	for _, att := range cfg.Attachments {
+		if isImageMime(att.MimeType) {
+			userMsg.Images = append(userMsg.Images, att.Data)
+		}
+	}
+	messages = append(messages, userMsg)
 
 	// Try to connect to MCP and fetch tools for the agent loop.
 	var tools []ollamaTool

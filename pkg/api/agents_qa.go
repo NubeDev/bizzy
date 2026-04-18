@@ -20,7 +20,7 @@ func (a *API) callTool(c *gin.Context) {
 		params = make(map[string]any)
 	}
 
-	result, err := a.ToolSvc.CallTool(user.ID, toolName, params)
+	result, err := a.ToolSvc.CallTool(c.Request.Context(), user.ID, toolName, params)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return

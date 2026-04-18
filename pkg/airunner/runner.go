@@ -3,7 +3,51 @@
 // and streaming their output as typed events.
 package airunner
 
-import "context"
+import (
+	"context"
+	"encoding/base64"
+	"strings"
+)
+
+// isImageMime returns true if the MIME type is an image format.
+func isImageMime(mime string) bool {
+	return strings.HasPrefix(mime, "image/")
+}
+
+// base64Decode decodes a base64 string to bytes.
+func base64Decode(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
+}
+
+// extFromMime returns a file extension for the given MIME type.
+func extFromMime(mime string) string {
+	switch mime {
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "image/svg+xml":
+		return ".svg"
+	case "application/pdf":
+		return ".pdf"
+	case "text/plain":
+		return ".txt"
+	case "text/csv":
+		return ".csv"
+	case "text/markdown":
+		return ".md"
+	case "application/json":
+		return ".json"
+	case "application/yaml":
+		return ".yaml"
+	default:
+		return ".bin"
+	}
+}
 
 // Provider identifies which AI backend to use.
 type Provider string
@@ -26,6 +70,13 @@ type HistoryMessage struct {
 	Content string `json:"content"`
 }
 
+// Attachment is a file (image, PDF, etc.) sent alongside a prompt.
+type Attachment struct {
+	Name     string `json:"name"`
+	MimeType string `json:"mime_type"`
+	Data     string `json:"data"` // base64-encoded
+}
+
 // RunConfig is the provider-agnostic configuration for a run.
 type RunConfig struct {
 	Prompt       string `json:"prompt"`
@@ -38,6 +89,7 @@ type RunConfig struct {
 	ThinkingBudget string `json:"thinking_budget,omitempty"` // Thinking level: "low", "medium", "high", or token count
 	WorkDir        string `json:"work_dir,omitempty"`        // Working directory for the CLI process
 	History        []HistoryMessage `json:"-"`               // Pre-loaded conversation history for stateless providers
+	Attachments    []Attachment `json:"attachments,omitempty"` // Files attached to this prompt (images, PDFs, etc.)
 }
 
 // Event is a normalised event emitted by any provider.

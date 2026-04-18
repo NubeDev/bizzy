@@ -68,6 +68,29 @@ func (r *OpenCodeRunner) Run(ctx context.Context, cfg RunConfig, sessionID strin
 		args = append(args, "--session", cfg.ResumeID, "--continue")
 	}
 
+	// Write attachments to temp files and pass via --file flags.
+	var attachmentCleanups []func()
+	for _, att := range cfg.Attachments {
+		data, decErr := base64Decode(att.Data)
+		if decErr != nil {
+			continue
+		}
+		ext := extFromMime(att.MimeType)
+		tmpFile, tmpErr := os.CreateTemp("", "nube-attach-*"+ext)
+		if tmpErr != nil {
+			continue
+		}
+		tmpFile.Write(data)
+		tmpFile.Close()
+		args = append(args, "--file", tmpFile.Name())
+		attachmentCleanups = append(attachmentCleanups, func() { os.Remove(tmpFile.Name()) })
+	}
+	defer func() {
+		for _, fn := range attachmentCleanups {
+			fn()
+		}
+	}()
+
 	args = append(args, cfg.Prompt)
 
 	cmd := exec.CommandContext(ctx, ocPath, args...)

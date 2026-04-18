@@ -1,6 +1,8 @@
 import { useRef, type ReactNode } from 'react'
-import { ArrowUp, Loader2, Trash2 } from 'lucide-react'
+import { ArrowUp, Loader2, Trash2, Paperclip } from 'lucide-react'
 import { useAutoResize } from './hooks'
+import { AttachmentPreview } from './attachment-preview'
+import type { FileAttachment } from './use-file-attach'
 
 interface Props {
   value: string
@@ -19,6 +21,26 @@ interface Props {
   header?: ReactNode
   /** Content rendered below the input (e.g. prompt options, keyboard hints) */
   footer?: ReactNode
+
+  // --- Attachments ---
+  /** Current attachments */
+  attachments?: FileAttachment[]
+  /** Remove an attachment by id */
+  onRemoveAttachment?: (id: string) => void
+  /** Open the file picker */
+  onOpenFilePicker?: () => void
+  /** File input ref — render a hidden <input type="file"> with this ref */
+  fileInputRef?: React.RefObject<HTMLInputElement | null>
+  /** File input onChange handler */
+  onFileInputChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
+  /** Drag handlers for drop zone */
+  onDragOver?: (e: React.DragEvent) => void
+  onDragLeave?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent) => void
+  /** Paste handler for images */
+  onPaste?: (e: React.ClipboardEvent) => void
+  /** Whether dragging over the drop zone */
+  isDragging?: boolean
 }
 
 export function ChatInput({
@@ -33,9 +55,22 @@ export function ChatInput({
   accentColor,
   header,
   footer,
+  attachments,
+  onRemoveAttachment,
+  onOpenFilePicker,
+  fileInputRef,
+  onFileInputChange,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onPaste,
+  isDragging,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useAutoResize(textareaRef, value, compact ? 150 : 160)
+
+  const hasAttachments = attachments && attachments.length > 0
+  const canSend = (value.trim() || hasAttachments) && !isStreaming
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onKeyDown) {
@@ -59,44 +94,94 @@ export function ChatInput({
     <div>
       {header}
 
-      <div className={`flex items-end ${compact ? 'gap-2' : ''} bg-card border border-border px-3 py-2 focus-within:border-foreground/20 transition-colors`}>
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Ask anything...'}
-          rows={1}
-          className={`flex-1 bg-transparent ${textSize} text-foreground placeholder:text-muted-foreground resize-none focus:outline-none ${minH} ${maxH} py-0.5 ${leading}`}
-          disabled={isStreaming}
-        />
-        <div className={`flex items-center gap-1 ${compact ? '' : 'ml-2'}`}>
-          {onClear && (
+      <div
+        className={`bg-card border px-3 py-2 focus-within:border-foreground/20 transition-colors ${
+          isDragging ? 'border-primary border-dashed bg-primary/5' : 'border-border'
+        }`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {/* Attachment previews */}
+        {hasAttachments && onRemoveAttachment && (
+          <AttachmentPreview
+            attachments={attachments!}
+            onRemove={onRemoveAttachment}
+            compact={compact}
+          />
+        )}
+
+        {/* Drop zone overlay text */}
+        {isDragging && (
+          <div className="text-center text-xs text-primary py-2 font-mono">
+            Drop files here
+          </div>
+        )}
+
+        {/* Input row */}
+        <div className={`flex items-end ${compact ? 'gap-2' : ''}`}>
+          {/* Paperclip button */}
+          {onOpenFilePicker && (
             <button
-              onClick={onClear}
-              className={`${btnSize} flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors`}
-              title="Clear"
+              onClick={onOpenFilePicker}
+              className={`${btnSize} flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0`}
+              title="Attach files"
+              disabled={isStreaming}
             >
-              <Trash2 size={compact ? 10 : 14} />
+              <Paperclip size={compact ? 12 : 14} />
             </button>
           )}
-          <button
-            onClick={onSend}
-            disabled={!value.trim() || isStreaming}
-            className={`${btnSize} flex items-center justify-center disabled:opacity-30 hover:opacity-80 transition-opacity ${
-              accentColor ? 'text-white' : 'bg-primary text-primary-foreground'
-            }`}
-            style={accentColor ? { background: accentColor } : undefined}
-          >
-            {isStreaming ? <Loader2 size={iconSize} className="animate-spin" /> : <ArrowUp size={iconSize} />}
-          </button>
+
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={onPaste}
+            placeholder={placeholder || 'Ask anything...'}
+            rows={1}
+            className={`flex-1 bg-transparent ${textSize} text-foreground placeholder:text-muted-foreground resize-none focus:outline-none ${minH} ${maxH} py-0.5 ${leading}`}
+            disabled={isStreaming}
+          />
+          <div className={`flex items-center gap-1 ${compact ? '' : 'ml-2'}`}>
+            {onClear && (
+              <button
+                onClick={onClear}
+                className={`${btnSize} flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors`}
+                title="Clear"
+              >
+                <Trash2 size={compact ? 10 : 14} />
+              </button>
+            )}
+            <button
+              onClick={onSend}
+              disabled={!canSend}
+              className={`${btnSize} flex items-center justify-center disabled:opacity-30 hover:opacity-80 transition-opacity ${
+                accentColor ? 'text-white' : 'bg-primary text-primary-foreground'
+              }`}
+              style={accentColor ? { background: accentColor } : undefined}
+            >
+              {isStreaming ? <Loader2 size={iconSize} className="animate-spin" /> : <ArrowUp size={iconSize} />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Hidden file input */}
+      {fileInputRef && onFileInputChange && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,.pdf,.txt,.csv,.md,.json,.yaml,.yml"
+          onChange={onFileInputChange}
+          className="hidden"
+        />
+      )}
 
       {footer}
     </div>
   )
 }
 
-/** Re-export the ref for consumers who need direct textarea access (e.g. command picker focus) */
 export { useAutoResize }

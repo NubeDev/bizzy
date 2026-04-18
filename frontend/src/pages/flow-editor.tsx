@@ -23,11 +23,9 @@ export function FlowEditorPage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
 
-  // Active run for execution overlay
   const { data: activeRun } = useFlowRun(activeRunId || '')
   const nodeStates = useNodeStatesForCanvas(activeRun)
 
-  // Build nodeTypeDefs lookup
   const nodeTypeDefs = useMemo(() => {
     const map: Record<string, NodeTypeDef> = {}
     if (nodeTypeCatalog?.types) {
@@ -40,22 +38,11 @@ export function FlowEditorPage() {
 
   const handleSave = useCallback(async () => {
     if (!flow || !id || !canvasRef.current) return
-
-    // Read current canvas state
     const { nodes, edges } = canvasRef.current.getFlowData()
-
     try {
       await updateFlow.mutateAsync({
         id,
-        data: {
-          name: flow.name,
-          description: flow.description,
-          nodes,
-          edges,
-          settings: flow.settings,
-          trigger: flow.trigger,
-          inputs: flow.inputs,
-        },
+        data: { name: flow.name, description: flow.description, nodes, edges, settings: flow.settings, trigger: flow.trigger, inputs: flow.inputs },
       })
       setDirty(false)
       setValidationErrors([])
@@ -64,14 +51,21 @@ export function FlowEditorPage() {
     }
   }, [flow, id, updateFlow])
 
+  const handleNameChange = useCallback(async (name: string) => {
+    if (!flow || !id) return
+    try {
+      await updateFlow.mutateAsync({
+        id,
+        data: { ...flow, name },
+      })
+    } catch (err: any) {
+      if (err.message) setValidationErrors([err.message])
+    }
+  }, [flow, id, updateFlow])
+
   const handleRun = useCallback(async () => {
     if (!id) return
-
-    // Save first if dirty
-    if (dirty && canvasRef.current) {
-      await handleSave()
-    }
-
+    if (dirty && canvasRef.current) await handleSave()
     try {
       const run = await runFlow.mutateAsync({ id })
       setActiveRunId(run.id)
@@ -95,16 +89,9 @@ export function FlowEditorPage() {
     canvasRef.current?.doAutoLayout()
   }, [])
 
-  const handleNodeConfigChange = useCallback(
-    (_nodeId: string, _data: Record<string, unknown>) => {
-      setDirty(true)
-    },
-    [],
-  )
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 4rem)' }}>
         <div className="text-xs text-muted-foreground">Loading flow...</div>
       </div>
     )
@@ -112,34 +99,29 @@ export function FlowEditorPage() {
 
   if (!flow) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 4rem)' }}>
         <div className="text-xs text-muted-foreground">Flow not found</div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 4rem)' }}>
       <FlowToolbar
         flowName={flow.name}
+        onNameChange={handleNameChange}
         onSave={handleSave}
         onRun={handleRun}
         onValidate={handleValidate}
         onAutoLayout={handleAutoLayout}
-        onUndo={() => {}}
-        onRedo={() => {}}
-        canUndo={false}
-        canRedo={false}
         saving={updateFlow.isPending}
         validationErrors={validationErrors}
         dirty={dirty}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left: Node Palette */}
         <NodePalette />
 
-        {/* Center: Canvas */}
         <FlowCanvas
           ref={canvasRef}
           initialNodes={flow.nodes || []}
@@ -150,16 +132,14 @@ export function FlowEditorPage() {
           onDirty={() => setDirty(true)}
         />
 
-        {/* Right: Config Panel */}
         {selectedNode && (
           <NodeConfig
             node={selectedNode}
-            onChange={handleNodeConfigChange}
+            onChange={() => { setDirty(true) }}
             onClose={() => setSelectedNode(null)}
           />
         )}
 
-        {/* Execution overlay */}
         <ExecutionOverlay
           runId={activeRunId}
           onClose={() => setActiveRunId(null)}

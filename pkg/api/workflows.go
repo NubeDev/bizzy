@@ -1,11 +1,8 @@
 package api
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 
-	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
@@ -168,66 +165,16 @@ func (a *API) listWorkflowDefs(c *gin.Context) {
 	c.JSON(http.StatusOK, defs)
 }
 
-// --- ToolCaller and PromptRunner bridges ---
-
-// WorkflowToolCaller bridges the workflow engine to the ToolService.
-type WorkflowToolCaller struct {
-	ToolSvc *services.ToolService
+// NewWorkflowToolCaller is kept for backward compatibility.
+// ToolService now directly satisfies services.ToolCaller.
+// Deprecated: pass toolSvc directly instead.
+func NewWorkflowToolCaller(toolSvc *services.ToolService) *services.ToolService {
+	return toolSvc
 }
 
-func NewWorkflowToolCaller(toolSvc *services.ToolService) *WorkflowToolCaller {
-	return &WorkflowToolCaller{ToolSvc: toolSvc}
-}
-
-func (tc *WorkflowToolCaller) CallTool(ctx context.Context, userID, toolName string, params map[string]any) (any, error) {
-	result, err := tc.ToolSvc.CallTool(userID, toolName, params)
-	if err != nil {
-		return nil, fmt.Errorf("tool %s: %w", toolName, err)
-	}
-	return result, nil
-}
-
-// WorkflowPromptRunner bridges the workflow engine to the AgentService.
-type WorkflowPromptRunner struct {
-	AgentSvc *services.AgentService
-}
-
-func NewWorkflowPromptRunner(agentSvc *services.AgentService) *WorkflowPromptRunner {
-	return &WorkflowPromptRunner{AgentSvc: agentSvc}
-}
-
-func (pr *WorkflowPromptRunner) RunPrompt(ctx context.Context, userID, prompt string) (string, error) {
-	user, err := pr.AgentSvc.GetUser(userID)
-	if err != nil {
-		return "", err
-	}
-
-	provider, model := pr.AgentSvc.ResolveProvider("", "", user)
-
-	runner, err := pr.AgentSvc.GetRunner(provider)
-	if err != nil {
-		return "", fmt.Errorf("provider %s: %w", provider, err)
-	}
-
-	systemPrompt := pr.AgentSvc.BuildSystemPrompt(user.ID)
-	prompt = pr.AgentSvc.EnrichPrompt(user.ID, prompt)
-
-	sessionID := models.GenerateID("ses-")
-	mcpURL := pr.AgentSvc.MCPURL()
-
-	result := runner.Run(ctx, airunner.RunConfig{
-		Prompt:       prompt,
-		SystemPrompt: systemPrompt,
-		MCPURL:       mcpURL,
-		MCPToken:     user.Token,
-		AllowedTools: "mcp__nube__*",
-		Model:        model,
-	}, sessionID, func(ev airunner.Event) {
-		// Events are discarded for workflow prompt stages.
-	})
-
-	if result.Text == "" {
-		return "", fmt.Errorf("AI returned empty response")
-	}
-	return result.Text, nil
+// NewWorkflowPromptRunner is kept for backward compatibility.
+// Use services.NewPromptRunner instead.
+// Deprecated: use services.NewPromptRunner(agentSvc) directly.
+func NewWorkflowPromptRunner(agentSvc *services.AgentService) *services.AgentPromptRunner {
+	return services.NewPromptRunner(agentSvc)
 }

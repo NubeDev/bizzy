@@ -27,9 +27,8 @@ function App() {
         <Route path="/my-apps/:id/workshop" element={<WorkshopPage />} />
         <Route path="/plugins" element={<PluginsPage />} />
         <Route path="/flows" element={<FlowsPage />} />
+        <Route path="/flows/:id" element={<FlowEditorPage />} />
       </Route>
-      {/* Flow editor uses full-screen layout (no AppShell header) */}
-      <Route path="/flows/:id" element={<FlowEditorPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -1,10 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 
+export interface ChatAttachment {
+  name: string
+  mimeType: string
+  data: string // base64
+  previewUrl?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   toolCalls?: string[]
   status?: 'connecting' | 'thinking' | 'tool_call' | 'streaming' | 'done'
+  attachments?: ChatAttachment[]
 }
 
 interface AgentEvent {
@@ -59,14 +67,16 @@ export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMe
     })
   }, [])
 
-  const send = useCallback((prompt: string, displayMessage?: string) => {
+  const send = useCallback((prompt: string, displayMessage?: string, attachments?: ChatAttachment[]) => {
     setIsStreaming(true)
     assistantBufferRef.current = ''
     toolCallsRef.current = []
+    // Capture attachments for this send
+    const sendAttachments = attachments && attachments.length > 0 ? attachments : undefined
 
     setMessages(prev => [
       ...prev,
-      { role: 'user', content: displayMessage || prompt },
+      { role: 'user', content: displayMessage || prompt, attachments: sendAttachments },
       { role: 'assistant', content: '', status: 'connecting' },
     ])
 
@@ -93,8 +103,8 @@ export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMe
         case 'session':
           setSessionId(ev.session_id)
           updateLastAssistant({ status: 'thinking' })
-          // Send prompt + provider/model + Claude session ID for resume + agent name for history tagging
-          const req: Record<string, string> = { prompt: promptToSend }
+          // Send prompt + provider/model + attachments + Claude session ID for resume + agent name
+          const req: Record<string, unknown> = { prompt: promptToSend }
           if (resumeId) {
             req.session_id = resumeId
           }
@@ -106,6 +116,13 @@ export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMe
           }
           if (modelRef.current) {
             req.model = modelRef.current
+          }
+          if (sendAttachments) {
+            req.attachments = sendAttachments.map(a => ({
+              name: a.name,
+              mime_type: a.mimeType,
+              data: a.data,
+            }))
           }
           ws.send(JSON.stringify(req))
           break

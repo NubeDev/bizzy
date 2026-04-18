@@ -1,16 +1,15 @@
-import { Save, Play, CheckCircle, Undo2, Redo2, LayoutDashboard } from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Save, Play, CheckCircle, LayoutDashboard, ChevronLeft, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface FlowToolbarProps {
   flowName: string
+  onNameChange: (name: string) => void
   onSave: () => void
   onRun: () => void
   onValidate: () => void
   onAutoLayout: () => void
-  onUndo: () => void
-  onRedo: () => void
-  canUndo: boolean
-  canRedo: boolean
   saving: boolean
   validationErrors?: string[]
   dirty: boolean
@@ -18,38 +17,63 @@ interface FlowToolbarProps {
 
 export function FlowToolbar({
   flowName,
+  onNameChange,
   onSave,
   onRun,
   onValidate,
   onAutoLayout,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
   saving,
   validationErrors,
   dirty,
 }: FlowToolbarProps) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState(flowName)
+
+  const commitName = () => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== flowName) {
+      onNameChange(trimmed)
+    }
+    setEditing(false)
+  }
+
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-card">
-      {/* Flow name */}
-      <div className="flex items-center gap-2 mr-4">
-        <span className="text-sm font-medium">{flowName || 'Untitled Flow'}</span>
+    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-background">
+      {/* Back to flows list */}
+      <Link
+        to="/flows"
+        className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors mr-1"
+        title="Back to flows"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </Link>
+
+      {/* Editable flow name */}
+      <div className="flex items-center gap-1.5 mr-3">
+        {editing ? (
+          <input
+            autoFocus
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') setEditing(false) }}
+            className="text-sm font-medium bg-transparent border-b border-primary outline-none px-0 py-0 w-48"
+          />
+        ) : (
+          <button
+            onClick={() => { setEditValue(flowName); setEditing(true) }}
+            className="flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors group"
+          >
+            {flowName || 'Untitled Flow'}
+            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+          </button>
+        )}
         {dirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved changes" />}
       </div>
 
-      <div className="flex items-center gap-0.5">
-        <ToolbarButton onClick={onUndo} disabled={!canUndo} title="Undo">
-          <Undo2 className="w-3.5 h-3.5" />
-        </ToolbarButton>
-        <ToolbarButton onClick={onRedo} disabled={!canRedo} title="Redo">
-          <Redo2 className="w-3.5 h-3.5" />
-        </ToolbarButton>
-      </div>
+      <div className="w-px h-4 bg-border" />
 
-      <div className="w-px h-4 bg-border mx-1" />
-
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 ml-1">
         <ToolbarButton onClick={onAutoLayout} title="Auto Layout">
           <LayoutDashboard className="w-3.5 h-3.5" />
         </ToolbarButton>

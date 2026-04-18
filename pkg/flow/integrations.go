@@ -12,56 +12,60 @@ import (
 	"github.com/NubeDev/bizzy/pkg/airunner"
 )
 
-// executePrompt runs a single-turn AI prompt.
-func (e *Engine) executePrompt(ctx context.Context, run *FlowRun, node *FlowNodeDef, inputs map[string]any) (any, error) {
-	prompt := resolveString(node.Data, inputs, "prompt")
+// RegisterIntegrationExecutors registers integration node executors.
+func RegisterIntegrationExecutors(r *ExecutorRegistry) {
+	r.RegisterFunc("ai-prompt", executeAIPrompt)
+	r.RegisterFunc("ai-runner", executeAIRunnerNode)
+	r.RegisterFunc("slack-send", executeSlackSendNode)
+	r.RegisterFunc("email-send", executeEmailSendNode)
+	r.RegisterFunc("webhook-call", executeWebhookCallNode)
+	r.RegisterPrefix("tool:", NodeExecutorFunc(executeToolCall))
+}
+
+func executeAIPrompt(ctx context.Context, ec *ExecContext) (any, error) {
+	prompt := resolveString(ec.Node.Data, ec.Inputs, "prompt")
 	if prompt == "" {
-		return nil, fmt.Errorf("ai-prompt node %s: missing prompt", node.ID)
+		return nil, fmt.Errorf("ai-prompt node %s: missing prompt", ec.Node.ID)
 	}
-
-	if e.prompts == nil {
-		return nil, fmt.Errorf("ai-prompt node %s: no prompt runner configured", node.ID)
+	if ec.Services.Prompts == nil {
+		return nil, fmt.Errorf("ai-prompt node %s: no prompt runner configured", ec.Node.ID)
 	}
-
-	result, err := e.prompts.RunPrompt(ctx, run.UserID, prompt)
+	result, err := ec.Services.Prompts.RunPrompt(ctx, ec.Run.UserID, prompt)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-// executeAIRunner runs a full AI coding session via the airunner infrastructure.
-func (e *Engine) executeAIRunner(ctx context.Context, run *FlowRun, node *FlowNodeDef, inputs map[string]any) (any, error) {
-	provider := resolveString(node.Data, inputs, "provider")
-	model := resolveString(node.Data, inputs, "model")
-	prompt := resolveString(node.Data, inputs, "prompt")
-	workDir := resolveString(node.Data, inputs, "work_dir")
+func executeAIRunnerNode(ctx context.Context, ec *ExecContext) (any, error) {
+	provider := resolveString(ec.Node.Data, ec.Inputs, "provider")
+	model := resolveString(ec.Node.Data, ec.Inputs, "model")
+	prompt := resolveString(ec.Node.Data, ec.Inputs, "prompt")
+	workDir := resolveString(ec.Node.Data, ec.Inputs, "work_dir")
 
 	if prompt == "" {
-		return nil, fmt.Errorf("ai-runner node %s: missing prompt", node.ID)
+		return nil, fmt.Errorf("ai-runner node %s: missing prompt", ec.Node.ID)
 	}
-	if e.agents == nil {
-		return nil, fmt.Errorf("ai-runner node %s: no agent runner registry configured", node.ID)
+	if ec.Services.Agents == nil {
+		return nil, fmt.Errorf("ai-runner node %s: no agent runner registry configured", ec.Node.ID)
 	}
 
-	runner, err := e.agents.Get(airunner.Provider(provider))
+	runner, err := ec.Services.Agents.Get(airunner.Provider(provider))
 	if err != nil {
-		return nil, fmt.Errorf("ai-runner node %s: provider %q not available: %w", node.ID, provider, err)
+		return nil, fmt.Errorf("ai-runner node %s: provider %q not available: %w", ec.Node.ID, provider, err)
 	}
 
-	sessionID := fmt.Sprintf("flow:%s:%s", run.ID, node.ID)
-
+	sessionID := fmt.Sprintf("flow:%s:%s", ec.Run.ID, ec.Node.ID)
 	cfg := airunner.RunConfig{
 		Prompt:         prompt,
 		Model:          model,
 		WorkDir:        workDir,
-		AllowedTools:   getStringOrDefault(node.Data, "allowed_tools", "*"),
-		ThinkingBudget: getStringOrDefault(node.Data, "thinking_budget", "medium"),
+		AllowedTools:   getStringOrDefault(ec.Node.Data, "allowed_tools", "*"),
+		ThinkingBudget: getStringOrDefault(ec.Node.Data, "thinking_budget", "medium"),
 	}
 
-	// Resume previous session if configured.
-	if resumeSession, _ := node.Data["resume_session"].(bool); resumeSession {
-		if prev, ok := run.NodeStates[node.ID]; ok && prev.Output != nil {
+	if resumeSession, _ := ec.Node.Data["resume_session"].(bool); resumeSession {
+		if prev, ok := ec.Run.NodeStates[ec.Node.ID]; ok && prev.Output != nil {
 			if prevResult, ok := prev.Output.(map[string]any); ok {
 				if sid, ok := prevResult["session_id"].(string); ok {
 					cfg.ResumeID = sid
@@ -71,19 +75,21 @@ func (e *Engine) executeAIRunner(ctx context.Context, run *FlowRun, node *FlowNo
 	}
 
 	result := runner.Run(ctx, cfg, sessionID, func(ev airunner.Event) {
-		e.events.publish(TopicFlowNodeProgress, FlowEvent{
-			RunID:    run.ID,
-			FlowID:   run.FlowID,
-			FlowName: run.FlowName,
-			NodeID:   node.ID,
-			NodeType: "ai-runner",
-			UserID:   run.UserID,
-			Output:   ev,
-		})
+		if ec.Services.Bus != nil {
+			ec.Services.Bus.Publish(TopicFlowNodeProgress, FlowEvent{
+				RunID:    ec.Run.ID,
+				FlowID:   ec.Run.FlowID,
+				FlowName: ec.Run.FlowName,
+				NodeID:   ec.Node.ID,
+				NodeType: "ai-runner",
+				UserID:   ec.Run.UserID,
+				Output:   ev,
+			})
+		}
 	})
 
 	if result.Text == "" && result.DurationMS == 0 {
-		return nil, fmt.Errorf("ai-runner node %s: session returned empty result", node.ID)
+		return nil, fmt.Errorf("ai-runner node %s: session returned empty result", ec.Node.ID)
 	}
 
 	return map[string]any{
@@ -100,74 +106,59 @@ func (e *Engine) executeAIRunner(ctx context.Context, run *FlowRun, node *FlowNo
 	}, nil
 }
 
-// executeSlackSend sends a message via the Slack adapter.
-func (e *Engine) executeSlackSend(ctx context.Context, node *FlowNodeDef, inputs map[string]any) (any, error) {
-	channel := resolveString(node.Data, inputs, "channel")
-	message := resolveString(node.Data, inputs, "message")
+func executeSlackSendNode(ctx context.Context, ec *ExecContext) (any, error) {
+	channel := resolveString(ec.Node.Data, ec.Inputs, "channel")
+	message := resolveString(ec.Node.Data, ec.Inputs, "message")
 	if channel == "" || message == "" {
-		return nil, fmt.Errorf("slack-send node %s: missing channel or message", node.ID)
+		return nil, fmt.Errorf("slack-send node %s: missing channel or message", ec.Node.ID)
 	}
-
-	if e.slack == nil {
-		return nil, fmt.Errorf("slack-send node %s: slack adapter not configured", node.ID)
+	if ec.Services.Slack == nil {
+		return nil, fmt.Errorf("slack-send node %s: slack adapter not configured", ec.Node.ID)
 	}
-
-	threadTS := resolveString(node.Data, inputs, "thread_ts")
-	result, err := e.slack.SendMessage(ctx, channel, message, threadTS)
-	if err != nil {
-		return nil, fmt.Errorf("slack-send node %s: %w", node.ID, err)
-	}
-	return result, nil
+	threadTS := resolveString(ec.Node.Data, ec.Inputs, "thread_ts")
+	return ec.Services.Slack.SendMessage(ctx, channel, message, threadTS)
 }
 
-// executeEmailSend sends an email via SMTP.
-func (e *Engine) executeEmailSend(ctx context.Context, node *FlowNodeDef, inputs map[string]any) (any, error) {
-	to := resolveString(node.Data, inputs, "to")
-	subject := resolveString(node.Data, inputs, "subject")
-	body := resolveString(node.Data, inputs, "body")
+func executeEmailSendNode(ctx context.Context, ec *ExecContext) (any, error) {
+	to := resolveString(ec.Node.Data, ec.Inputs, "to")
+	subject := resolveString(ec.Node.Data, ec.Inputs, "subject")
+	body := resolveString(ec.Node.Data, ec.Inputs, "body")
 	if to == "" || subject == "" {
-		return nil, fmt.Errorf("email-send node %s: missing to or subject", node.ID)
+		return nil, fmt.Errorf("email-send node %s: missing to or subject", ec.Node.ID)
 	}
-
-	if e.email == nil {
-		return nil, fmt.Errorf("email-send node %s: email adapter not configured", node.ID)
+	if ec.Services.Email == nil {
+		return nil, fmt.Errorf("email-send node %s: email adapter not configured", ec.Node.ID)
 	}
-
-	err := e.email.SendEmail(ctx, to, subject, body)
-	if err != nil {
-		return nil, fmt.Errorf("email-send node %s: %w", node.ID, err)
+	if err := ec.Services.Email.SendEmail(ctx, to, subject, body); err != nil {
+		return nil, fmt.Errorf("email-send node %s: %w", ec.Node.ID, err)
 	}
 	return map[string]any{"sent": true, "to": to, "subject": subject}, nil
 }
 
-// executeWebhookCall makes an HTTP request.
-func (e *Engine) executeWebhookCall(ctx context.Context, node *FlowNodeDef, inputs map[string]any) (any, error) {
-	url := resolveString(node.Data, inputs, "url")
+func executeWebhookCallNode(ctx context.Context, ec *ExecContext) (any, error) {
+	url := resolveString(ec.Node.Data, ec.Inputs, "url")
 	if url == "" {
-		return nil, fmt.Errorf("webhook-call node %s: missing url", node.ID)
+		return nil, fmt.Errorf("webhook-call node %s: missing url", ec.Node.ID)
 	}
-
-	method := resolveString(node.Data, inputs, "method")
+	method := resolveString(ec.Node.Data, ec.Inputs, "method")
 	if method == "" {
 		method = "GET"
 	}
 
 	var reqBody io.Reader
-	if bodyVal, ok := inputs["body"]; ok && bodyVal != nil {
+	if bodyVal, ok := ec.Inputs["body"]; ok && bodyVal != nil {
 		bodyBytes, err := json.Marshal(bodyVal)
 		if err != nil {
-			return nil, fmt.Errorf("webhook-call node %s: marshal body: %w", node.ID, err)
+			return nil, fmt.Errorf("webhook-call node %s: marshal body: %w", ec.Node.ID, err)
 		}
 		reqBody = bytes.NewReader(bodyBytes)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("webhook-call node %s: create request: %w", node.ID, err)
+		return nil, fmt.Errorf("webhook-call node %s: create request: %w", ec.Node.ID, err)
 	}
-
-	// Set headers.
-	if headers, ok := inputs["headers"].(map[string]any); ok {
+	if headers, ok := ec.Inputs["headers"].(map[string]any); ok {
 		for k, v := range headers {
 			req.Header.Set(k, fmt.Sprintf("%v", v))
 		}
@@ -179,39 +170,26 @@ func (e *Engine) executeWebhookCall(ctx context.Context, node *FlowNodeDef, inpu
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("webhook-call node %s: %w", node.ID, err)
+		return nil, fmt.Errorf("webhook-call node %s: %w", ec.Node.ID, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("webhook-call node %s: read response: %w", node.ID, err)
-	}
-
-	result := map[string]any{
-		"status":      resp.StatusCode,
-		"status_text": resp.Status,
-	}
-
-	// Try to parse JSON response.
+	respBody, _ := io.ReadAll(resp.Body)
+	result := map[string]any{"status": resp.StatusCode, "status_text": resp.Status}
 	var jsonBody any
-	if err := json.Unmarshal(respBody, &jsonBody); err == nil {
+	if json.Unmarshal(respBody, &jsonBody) == nil {
 		result["body"] = jsonBody
 	} else {
 		result["body"] = string(respBody)
 	}
-
 	return result, nil
 }
 
-// --- Integration adapter interfaces ---
-
-// SlackSender is the interface for sending Slack messages from flow nodes.
-type SlackSender interface {
-	SendMessage(ctx context.Context, channel, message, threadTS string) (any, error)
+func executeToolCall(ctx context.Context, ec *ExecContext) (any, error) {
+	if ec.Services.Tools == nil {
+		return nil, fmt.Errorf("tool node %s: no tool caller configured", ec.Node.ID)
+	}
+	toolName := ec.Node.Type[len("tool:"):]
+	return ec.Services.Tools.CallTool(ctx, ec.Run.UserID, toolName, ec.Inputs)
 }
 
-// EmailSender is the interface for sending emails from flow nodes.
-type EmailSender interface {
-	SendEmail(ctx context.Context, to, subject, body string) error
-}

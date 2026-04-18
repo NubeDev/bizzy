@@ -7,19 +7,9 @@ import (
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"gorm.io/gorm"
 )
-
-// ToolCaller executes a named tool with params and returns the result.
-// Implemented by the API layer which has access to MCP/JS tools.
-type ToolCaller interface {
-	CallTool(ctx context.Context, userID, toolName string, params map[string]any) (any, error)
-}
-
-// PromptRunner sends a prompt to an AI provider and returns the text response.
-type PromptRunner interface {
-	RunPrompt(ctx context.Context, userID, prompt string) (string, error)
-}
 
 // EventPublisher publishes lifecycle events to the event bus.
 // Optional — if nil, events are silently skipped.
@@ -34,8 +24,8 @@ type Runner struct {
 	active     map[string]*activeRun // workflow_id -> active run state
 	db         *gorm.DB
 	workflows  *Store
-	tools      ToolCaller
-	prompts    PromptRunner
+	tools      services.ToolCaller
+	prompts    services.PromptRunner
 	bus        EventPublisher // optional event bus
 }
 
@@ -55,8 +45,8 @@ type approvalAction struct {
 func NewRunner(
 	db *gorm.DB,
 	workflows *Store,
-	tools ToolCaller,
-	prompts PromptRunner,
+	tools services.ToolCaller,
+	prompts services.PromptRunner,
 ) *Runner {
 	return &Runner{
 		active:    make(map[string]*activeRun),

@@ -23,7 +23,7 @@ type WorkflowStarter interface {
 
 // ToolExecutor abstracts the services.ToolService for the command router.
 type ToolExecutor interface {
-	CallTool(userID, toolName string, params map[string]any) (map[string]any, error)
+	CallTool(ctx context.Context, userID, toolName string, params map[string]any) (any, error)
 }
 
 // AgentExecutor abstracts the services.AgentService for async AI jobs.
@@ -214,7 +214,7 @@ func (r *Router) runWorkflow(ctx context.Context, cmd Command) (Result, error) {
 }
 
 func (r *Router) runTool(ctx context.Context, cmd Command) (Result, error) {
-	output, err := r.tools.CallTool(cmd.UserID, cmd.Target.Name, cmd.Params)
+	output, err := r.tools.CallTool(ctx, cmd.UserID, cmd.Target.Name, cmd.Params)
 	if err != nil {
 		return Result{}, fmt.Errorf("call tool: %w", err)
 	}

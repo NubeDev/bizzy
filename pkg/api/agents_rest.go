@@ -12,13 +12,14 @@ import (
 
 // runAgentRequest is the JSON body for POST /api/agents/run.
 type runAgentRequest struct {
-	Prompt         string `json:"prompt"   binding:"required"`
-	Agent          string `json:"agent,omitempty"`
-	App            string `json:"app,omitempty"`             // App name — stored for session lookup on next page load
-	SessionID      string `json:"session_id,omitempty"`      // If set, resumes this session (multi-turn)
-	Provider       string `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot"
-	Model          string `json:"model,omitempty"`           // model override for the chosen provider
-	ThinkingBudget string `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
+	Prompt         string               `json:"prompt"   binding:"required"`
+	Agent          string               `json:"agent,omitempty"`
+	App            string               `json:"app,omitempty"`             // App name — stored for session lookup on next page load
+	SessionID      string               `json:"session_id,omitempty"`      // If set, resumes this session (multi-turn)
+	Provider       string               `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot", "opencode"
+	Model          string               `json:"model,omitempty"`           // model override for the chosen provider
+	ThinkingBudget string               `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
+	Attachments    []airunner.Attachment `json:"attachments,omitempty"`     // images/files attached to the prompt
 }
 
 // runAgentResponse is the synchronous response.
@@ -79,6 +80,7 @@ func (a *API) runAgentREST(c *gin.Context) {
 		AllowedTools:   "mcp__nube__*",
 		Model:          model,
 		ThinkingBudget: req.ThinkingBudget,
+		Attachments:    req.Attachments,
 	}
 
 	// Handle resume based on provider type.

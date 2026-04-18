@@ -2,6 +2,7 @@ import { User, Sparkles, AlertCircle, Wrench, Loader2, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { CopyButton } from './copy-button'
 import { Markdown } from './markdown'
+import { AttachmentInline } from './attachment-preview'
 import type { ChatMessage } from '@/hooks/use-agent-chat'
 
 interface Props {
@@ -50,6 +51,19 @@ export function ChatBubble({
         </div>
         <div className="flex-1 min-w-0 pt-0.5">
           <p className={`${compact ? 'text-xs' : 'text-sm'} leading-relaxed text-foreground`}>{message.content}</p>
+          {message.attachments && message.attachments.length > 0 && (
+            <AttachmentInline
+              attachments={message.attachments.map((a, i) => ({
+                id: `msg-att-${i}`,
+                name: a.name,
+                mimeType: a.mimeType,
+                data: a.data,
+                previewUrl: a.previewUrl || `data:${a.mimeType};base64,${a.data}`,
+                size: 0,
+              }))}
+              compact={compact}
+            />
+          )}
         </div>
       </div>
     )

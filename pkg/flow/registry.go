@@ -3,6 +3,8 @@ package flow
 import (
 	"fmt"
 	"sync"
+
+	"github.com/NubeDev/bizzy/pkg/flow/settings"
 )
 
 // NodeTypeDef describes a node type that can be placed on the canvas.
@@ -258,6 +260,14 @@ func (r *NodeTypeRegistry) registerBuiltins() {
 			Outputs: []PortDef{{Handle: "response", Label: "Response", Type: "object"}, {Handle: "error", Label: "Error", Type: "string"}},
 		},
 	})
+
+	// Attach JSON Schema settings to each built-in node type.
+	for nodeType, schema := range settings.BuiltinSchemas() {
+		if def, ok := r.types[nodeType]; ok {
+			def.Settings = schema
+			r.types[nodeType] = def
+		}
+	}
 
 	fmt.Printf("[flow] registered %d built-in node types\n", len(r.types))
 }

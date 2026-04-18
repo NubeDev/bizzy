@@ -21,12 +21,13 @@ var wsUpgrader = websocket.Upgrader{
 
 // wsRequest is the first message the client sends after connecting.
 type wsRequest struct {
-	Prompt         string `json:"prompt"`
-	SessionID      string `json:"session_id,omitempty"`      // If set, resumes this Claude session (multi-turn)
-	Agent          string `json:"agent"`
-	Provider       string `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot"
-	Model          string `json:"model,omitempty"`           // model override for the chosen provider
-	ThinkingBudget string `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
+	Prompt         string               `json:"prompt"`
+	SessionID      string               `json:"session_id,omitempty"`      // If set, resumes this Claude session (multi-turn)
+	Agent          string               `json:"agent"`
+	Provider       string               `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot", "opencode"
+	Model          string               `json:"model,omitempty"`           // model override for the chosen provider
+	ThinkingBudget string               `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
+	Attachments    []airunner.Attachment `json:"attachments,omitempty"`     // images/files attached to the prompt
 }
 
 // runAgentWS upgrades to WebSocket and runs a Claude session.
@@ -145,6 +146,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 			AllowedTools:   "mcp__nube__*",
 			Model:          model,
 			ThinkingBudget: req.ThinkingBudget,
+			Attachments:    req.Attachments,
 		},
 		sessionID,
 		user.ID,

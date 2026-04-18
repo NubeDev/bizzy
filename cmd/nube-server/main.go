@@ -100,12 +100,15 @@ func main() {
 	}
 	secretStore := secrets.NewStore(db, secretKey)
 
+	// Shared service bridges.
+	promptRunner := services.NewPromptRunner(agentSvc)
+
 	// Flow engine (visual DAG workflows).
 	flowStore := flow.NewStore(db)
 	flowRegistry := flow.NewRegistry()
 	flowEngine := flow.NewEngine(flowStore, flowRegistry)
-	flowEngine.SetTools(api.NewWorkflowToolCaller(toolSvc))
-	flowEngine.SetPrompts(api.NewWorkflowPromptRunner(agentSvc))
+	flowEngine.SetTools(toolSvc)
+	flowEngine.SetPrompts(promptRunner)
 	flowEngine.SetAgents(runners)
 
 	a := &api.API{
@@ -127,8 +130,8 @@ func main() {
 	a.Workflows = workflow.NewRunner(
 		db,
 		wfStore,
-		api.NewWorkflowToolCaller(toolSvc),
-		api.NewWorkflowPromptRunner(agentSvc),
+		toolSvc,
+		promptRunner,
 	)
 
 	// --- Command Bus & Event Bus ---

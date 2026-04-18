@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 
 interface NodeConfigProps {
   node: Node | null
-  onChange: (nodeId: string, data: Record<string, unknown>) => void
+  onChange: (...args: any[]) => void
   onClose: () => void
 }
 

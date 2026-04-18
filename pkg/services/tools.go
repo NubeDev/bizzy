@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -113,7 +114,8 @@ func (s *ToolService) ResolveTool(userID, toolName string) (*ResolvedTool, error
 }
 
 // CallTool resolves and executes a JS tool in one step.
-func (s *ToolService) CallTool(userID, toolName string, params map[string]any) (map[string]any, error) {
+// Satisfies the services.ToolCaller interface.
+func (s *ToolService) CallTool(ctx context.Context, userID, toolName string, params map[string]any) (any, error) {
 	resolved, err := s.ResolveTool(userID, toolName)
 	if err != nil {
 		return nil, err
