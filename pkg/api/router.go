@@ -8,6 +8,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/command"
+	"github.com/NubeDev/bizzy/pkg/flow"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/plugin"
@@ -40,6 +41,9 @@ type API struct {
 
 	// Plugin system (optional — nil if NATS bus is not enabled).
 	PluginRegistry *plugin.Registry
+
+	// Flow engine (visual DAG workflows).
+	FlowEngine *flow.Engine
 
 	// Command bus (optional — nil if not configured).
 	CmdRouter      *command.Router
@@ -254,6 +258,28 @@ func (a *API) SetupRouter() *gin.Engine {
 		userSec.GET("/:ownerType/:ownerName", a.listUserSecrets)
 		userSec.PUT("/:ownerType/:ownerName/:key", a.setUserSecret)
 		userSec.DELETE("/:ownerType/:ownerName/:key", a.deleteUserSecret)
+	}
+
+	// --- Visual Flows (DAG engine) ---
+	if a.FlowEngine != nil {
+		flows := authed.Group("/api/flows")
+		flows.POST("", a.createFlow)
+		flows.GET("", a.listFlows)
+		flows.GET("/node-types", a.listNodeTypes)
+		flows.GET("/node-types/:type", a.getNodeType)
+		flows.POST("/validate", a.validateFlow)
+		flows.GET("/:id", a.getFlow)
+		flows.PUT("/:id", a.updateFlow)
+		flows.DELETE("/:id", a.deleteFlow)
+		flows.POST("/:id/duplicate", a.duplicateFlow)
+		flows.POST("/:id/run", a.runFlow)
+		flows.GET("/:id/runs", a.listFlowRuns)
+
+		flowRuns := authed.Group("/api/flow-runs")
+		flowRuns.GET("/:runId", a.getFlowRun)
+		flowRuns.POST("/:runId/approve/:nodeId", a.approveFlowNode)
+		flowRuns.POST("/:runId/reject/:nodeId", a.rejectFlowNode)
+		flowRuns.POST("/:runId/cancel", a.cancelFlowRun)
 	}
 
 	// --- Workflows ---

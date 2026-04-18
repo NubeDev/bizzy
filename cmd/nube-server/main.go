@@ -12,6 +12,7 @@ import (
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/database"
+	"github.com/NubeDev/bizzy/pkg/flow"
 	"github.com/NubeDev/bizzy/pkg/memory"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/revision"
@@ -99,6 +100,14 @@ func main() {
 	}
 	secretStore := secrets.NewStore(db, secretKey)
 
+	// Flow engine (visual DAG workflows).
+	flowStore := flow.NewStore(db)
+	flowRegistry := flow.NewRegistry()
+	flowEngine := flow.NewEngine(flowStore, flowRegistry)
+	flowEngine.SetTools(api.NewWorkflowToolCaller(toolSvc))
+	flowEngine.SetPrompts(api.NewWorkflowPromptRunner(agentSvc))
+	flowEngine.SetAgents(runners)
+
 	a := &api.API{
 		DB:            db,
 		AppRegistry:   registry,
@@ -111,6 +120,7 @@ func main() {
 		ToolSvc:       toolSvc,
 		Secrets:       secretStore,
 		Revisions:     revision.NewStore(db),
+		FlowEngine:    flowEngine,
 	}
 
 	// Wire up the workflow engine (uses services, not the API directly).
@@ -140,6 +150,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "[nube-server] listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "[nube-server] apps: %d loaded from %s\n", len(registry.List()), appsDir)
 	fmt.Fprintf(os.Stderr, "[nube-server] workflows: %d loaded\n", wfCount)
+	fmt.Fprintf(os.Stderr, "[nube-server] flow engine: enabled (%d node types)\n", len(flowRegistry.All()))
 	fmt.Fprintf(os.Stderr, "[nube-server] database: SQLite (bizzy.db)\n")
 	if userCount == 0 {
 		fmt.Fprintf(os.Stderr, "[nube-server] no users found — POST /bootstrap to create the first admin\n")

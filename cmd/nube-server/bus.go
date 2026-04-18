@@ -34,6 +34,12 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 	a.Workflows.SetBus(eventBus)
 	agentSvc.Jobs.SetBus(eventBus)
 
+	// Wire event bus into flow engine.
+	if a.FlowEngine != nil {
+		a.FlowEngine.SetBus(eventBus)
+		a.FlowEngine.RecoverRuns()
+	}
+
 	// --- Plugin System ---
 	pluginReg := plugin.NewRegistry(plugin.RegistryConfig{
 		NC: eventBus.Conn(),

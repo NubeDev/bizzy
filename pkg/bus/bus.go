@@ -63,6 +63,7 @@ func New(dataDir string) (*Bus, error) {
 		// and must NOT be covered by a JetStream stream — the stream would send a
 		// PubAck to the reply inbox before the registry handler can respond.
 		// Only persist health and registered-notification subjects.
+		{Name: "FLOWS", Subjects: []string{"flow.>"}, MaxAge: 7 * 24 * time.Hour},
 		{Name: "EXTENSIONS", Subjects: []string{"extension.health.*", "extension.registered.*"}, MaxAge: 24 * time.Hour},
 	}
 	for _, cfg := range streams {

@@ -3,9 +3,9 @@
  * Drives AI generation. Uses shared chat lib for rendering.
  */
 import { useState, useRef, useEffect } from "react"
-import { BookOpen, ChevronDown, ChevronRight, Sparkles, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Sparkles, Trash2 } from "lucide-react"
 import { useAgentChat, type ChatMessage } from "@/hooks/use-agent-chat"
-import { ChatBubble, ChatInput, ChatSuggestions, useAutoScroll } from "@/lib/chat"
+import { ChatBubble, ChatInput, ChatSuggestions, ContextPicker, useAutoScroll } from "@/lib/chat"
 import { BouncingBalls } from "@/components/ui/bouncing-balls"
 import { ProviderSelector } from "@/components/chat/provider-selector"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,6 @@ interface Props {
 export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPendingMessageConsumed, appName, initialMessages, initialClaudeSessionId, onClearHistory }: Props) {
   const { compose } = useBootstrapPrompts()
   const [extraPrompts, setExtraPrompts] = useState<string[]>([])
-  const [showPromptPicker, setShowPromptPicker] = useState(false)
   const [provider, setProvider] = useState('')
   const [model, setModel] = useState('')
   const { messages, isStreaming, send, clear } = useAgentChat({
@@ -185,13 +184,11 @@ export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPending
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BouncingBalls active={isStreaming} size={8} />
-                  <button
-                    onClick={() => setShowPromptPicker(p => !p)}
-                    className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <BookOpen size={10} />
-                    Context{extraPrompts.length > 0 && ` (${extraPrompts.length})`}
-                  </button>
+                  <ContextPicker
+                    options={OPTIONAL_BUILDER_PROMPTS}
+                    selected={extraPrompts}
+                    onToggle={toggleExtraPrompt}
+                  />
                 </div>
                 <ProviderSelector
                   provider={provider}
@@ -200,23 +197,6 @@ export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPending
                   onModelChange={setModel}
                 />
               </div>
-              {showPromptPicker && (
-                <div className="flex flex-wrap gap-1">
-                  {OPTIONAL_BUILDER_PROMPTS.map(p => (
-                    <button
-                      key={p.name}
-                      onClick={() => toggleExtraPrompt(p.name)}
-                      className={`text-[10px] font-mono px-1.5 py-0.5 border transition-colors ${
-                        extraPrompts.includes(p.name)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background text-muted-foreground border-border hover:border-foreground/20"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           }
         />

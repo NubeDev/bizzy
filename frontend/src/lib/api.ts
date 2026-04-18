@@ -8,6 +8,10 @@ import type {
   StoreQuery,
   PluginSummary,
   BootstrapPrompt,
+  FlowDef,
+  FlowRun,
+  NodeTypeCatalog,
+  FlowValidationResult,
 } from './types'
 
 class ApiError extends Error {
@@ -238,6 +242,74 @@ class ApiClient {
     return this.request<{ session_id: string; provider: string; text: string; duration_ms: number; cost_usd: number }>('/api/agents/run/sync', {
       method: 'POST',
       body: JSON.stringify({ prompt, provider, model }),
+    })
+  }
+  // --- Flow Engine ---
+
+  // Flow definitions
+  flows() {
+    return this.request<FlowDef[]>('/api/flows')
+  }
+  flow(id: string) {
+    return this.request<FlowDef>(`/api/flows/${id}`)
+  }
+  createFlow(data: Partial<FlowDef>) {
+    return this.request<FlowDef>('/api/flows', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  updateFlow(id: string, data: Partial<FlowDef>) {
+    return this.request<FlowDef>(`/api/flows/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+  deleteFlow(id: string) {
+    return this.request<void>(`/api/flows/${id}`, { method: 'DELETE' })
+  }
+  duplicateFlow(id: string) {
+    return this.request<FlowDef>(`/api/flows/${id}/duplicate`, { method: 'POST' })
+  }
+  validateFlow(data: Partial<FlowDef>) {
+    return this.request<FlowValidationResult>('/api/flows/validate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Node type catalog
+  nodeTypes() {
+    return this.request<NodeTypeCatalog>('/api/flows/node-types')
+  }
+
+  // Flow execution
+  runFlow(id: string, inputs?: Record<string, unknown>) {
+    return this.request<FlowRun>(`/api/flows/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
+    })
+  }
+  flowRuns(flowId: string) {
+    return this.request<FlowRun[]>(`/api/flows/${flowId}/runs`)
+  }
+  flowRun(runId: string) {
+    return this.request<FlowRun>(`/api/flow-runs/${runId}`)
+  }
+  approveFlowNode(runId: string, nodeId: string) {
+    return this.request<unknown>(`/api/flow-runs/${runId}/approve/${nodeId}`, {
+      method: 'POST',
+    })
+  }
+  rejectFlowNode(runId: string, nodeId: string, feedback?: string) {
+    return this.request<unknown>(`/api/flow-runs/${runId}/reject/${nodeId}`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback }),
+    })
+  }
+  cancelFlowRun(runId: string) {
+    return this.request<unknown>(`/api/flow-runs/${runId}/cancel`, {
+      method: 'POST',
     })
   }
 }

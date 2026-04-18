@@ -49,6 +49,7 @@ server: $(NUBE_SERVER_BIN)
 
 ## start: Start nube-server (foreground)
 start: $(NUBE_SERVER_BIN)
+	@fuser -k $(SERVER_PORT)/tcp 2>/dev/null || true
 	@mkdir -p $(DATA_DIR)
 	@echo "Starting nube-server on :$(SERVER_PORT)..."
 	@echo ""

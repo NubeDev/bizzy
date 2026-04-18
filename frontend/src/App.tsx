@@ -8,6 +8,8 @@ import { CreateAppPage } from './pages/create-app'
 import { ChatPage } from './pages/chat'
 import { WorkshopPage } from './pages/workshop'
 import { PluginsPage } from './pages/plugins'
+import { FlowsPage } from './pages/flows'
+import { FlowEditorPage } from './pages/flow-editor'
 
 function App() {
   return (
@@ -24,7 +26,10 @@ function App() {
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/my-apps/:id/workshop" element={<WorkshopPage />} />
         <Route path="/plugins" element={<PluginsPage />} />
+        <Route path="/flows" element={<FlowsPage />} />
       </Route>
+      {/* Flow editor uses full-screen layout (no AppShell header) */}
+      <Route path="/flows/:id" element={<FlowEditorPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

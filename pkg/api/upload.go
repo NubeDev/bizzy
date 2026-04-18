@@ -392,10 +392,10 @@ func parseZipTools(files map[string][]byte) ([]models.StoreTool, error) {
 		name := strings.TrimSuffix(base, ".json")
 
 		var manifest struct {
-			Name        string                     `json:"name"`
-			Description string                     `json:"description"`
-			ToolClass   string                     `json:"toolClass"`
-			Mode        string                     `json:"mode"`
+			Name        string                      `json:"name"`
+			Description string                      `json:"description"`
+			ToolClass   string                      `json:"toolClass"`
+			Mode        string                      `json:"mode"`
 			Params      map[string]models.ToolParam `json:"params"`
 		}
 		if err := json.Unmarshal(data, &manifest); err != nil {

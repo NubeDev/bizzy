@@ -153,3 +153,122 @@ export interface PluginSummary {
   prompt_count: number
 }
 
+// --- Flow Engine Types ---
+
+export interface FlowPosition {
+  x: number
+  y: number
+}
+
+export interface FlowPortDef {
+  handle: string
+  label?: string
+  type?: string
+  required?: boolean
+}
+
+export interface FlowPortsDef {
+  inputs?: FlowPortDef[]
+  outputs?: FlowPortDef[]
+}
+
+export interface FlowNodeDef {
+  id: string
+  type: string
+  label?: string
+  position: FlowPosition
+  data?: Record<string, unknown>
+  ports?: FlowPortsDef
+}
+
+export interface FlowEdgeDef {
+  id: string
+  source: string
+  sourceHandle: string
+  target: string
+  targetHandle: string
+  condition?: string
+  label?: string
+}
+
+export interface FlowInputDef {
+  name: string
+  type?: string
+  description?: string
+  default?: unknown
+  required?: boolean
+}
+
+export interface FlowTriggerDef {
+  type: string
+  schedule?: string
+  event?: string
+  filter?: Record<string, unknown>
+}
+
+export interface FlowDef {
+  id: string
+  name: string
+  description: string
+  version: number
+  nodes: FlowNodeDef[]
+  edges: FlowEdgeDef[]
+  inputs?: FlowInputDef[]
+  trigger?: FlowTriggerDef
+  settings?: Record<string, unknown>
+  user_id: string
+  created_at: string
+  updated_at: string
+}
+
+export type FlowRunStatus = 'pending' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled'
+export type NodeStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed' | 'skipped' | 'waiting'
+
+export interface NodeState {
+  status: NodeStatus
+  input?: unknown
+  output?: unknown
+  error?: string
+  started_at?: string
+  finished_at?: string
+  duration_ms?: number
+  retries?: number
+}
+
+export interface FlowRun {
+  id: string
+  flow_id: string
+  flow_version: number
+  flow_name: string
+  status: FlowRunStatus
+  inputs?: Record<string, unknown>
+  output?: unknown
+  node_states: Record<string, NodeState>
+  variables?: Record<string, unknown>
+  error?: string
+  user_id: string
+  created_at: string
+  finished_at?: string
+}
+
+export interface NodeTypeDef {
+  type: string
+  label: string
+  description?: string
+  category: string
+  icon?: string
+  source: string
+  ports: FlowPortsDef
+  settings?: unknown
+}
+
+export interface NodeTypeCatalog {
+  types: NodeTypeDef[]
+  grouped: Record<string, NodeTypeDef[]>
+}
+
+export interface FlowValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
