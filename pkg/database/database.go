@@ -31,6 +31,7 @@ var allModels = []any{
 	&models.Plugin{},
 	&models.Revision{},
 	&models.Secret{},
+	&models.ChatHistory{},
 }
 
 // Open creates (or opens) a SQLite database inside dataDir, runs auto-migration,

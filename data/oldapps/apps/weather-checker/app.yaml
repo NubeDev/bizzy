@@ -1,0 +1,12 @@
+name: weather-checker
+version: 1.0.0
+description: Check current weather conditions for any city using Open-Meteo free API. Get temperature, humidity, wind speed, and weather descriptions in real time.
+author: Admin
+permissions:
+    allowedHosts:
+        - api.open-meteo.com
+        - geocoding-api.open-meteo.com
+    defaultToolClass: read-only
+timeout: 30s
+settings: []
+tags: []

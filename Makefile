@@ -10,6 +10,9 @@ DOC2PDF_BIN := $(BIN_DIR)/doc2pdf
 FAKE_PLUGIN_GEN_BIN := $(BIN_DIR)/fake-plugin-generator
 NUBE_SERVER_BIN := $(BIN_DIR)/nube-server
 NUBE_CLI_BIN := $(BIN_DIR)/nube
+NATS_SERVER_BIN := $(shell which nats-server)
+NATS_PORT := 4225
+NATS_STORE_DIR := $(DATA_DIR)/nats
 
 # Go build flags
 GO_BUILD := go build
@@ -17,6 +20,7 @@ BUILD_FLAGS := -trimpath -ldflags="-s -w"
 
 .PHONY: all build clean install test help
 .PHONY: server start stop reset test-api
+.PHONY: nats nats-stop
 .PHONY: $(NUBE_SERVER_BIN) $(NUBE_CLI_BIN)
 
 all: build
@@ -60,6 +64,18 @@ stop:
 	@echo "Stopping servers..."
 	@-pkill -f "$(NUBE_SERVER_BIN)" 2>/dev/null || true
 	@echo "Stopped."
+
+## nats: Start a standalone NATS server with JetStream on 127.0.0.1:4225
+nats:
+	@mkdir -p $(NATS_STORE_DIR)
+	@echo "Starting NATS server on 127.0.0.1:$(NATS_PORT) (JetStream, store=$(NATS_STORE_DIR))..."
+	@echo "Press Ctrl+C to stop."
+	$(NATS_SERVER_BIN) --addr 127.0.0.1 --port $(NATS_PORT) --jetstream --store_dir $(NATS_STORE_DIR)
+
+## nats-stop: Stop the standalone NATS server
+nats-stop:
+	@-pkill -f "nats-server" 2>/dev/null || true
+	@echo "NATS stopped."
 
 ## reset: Wipe data directory and stop servers
 reset: stop

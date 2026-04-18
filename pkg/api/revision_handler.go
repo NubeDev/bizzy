@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -91,7 +90,6 @@ func (a *API) revertRevision(c *gin.Context) {
 		}
 		app.UpdatedAt = time.Now().UTC()
 		a.DB.Save(&app)
-		writeToolDisk(oldTool, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 		a.AppRegistry.Reload()
 		a.MCPFactory.Rebuild()
 		c.JSON(http.StatusOK, oldTool)
@@ -123,7 +121,6 @@ func (a *API) revertRevision(c *gin.Context) {
 		}
 		app.UpdatedAt = time.Now().UTC()
 		a.DB.Save(&app)
-		writePromptDisk(oldPrompt, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 		a.AppRegistry.Reload()
 		a.MCPFactory.Rebuild()
 		c.JSON(http.StatusOK, oldPrompt)

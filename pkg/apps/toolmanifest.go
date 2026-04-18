@@ -22,7 +22,8 @@ type ToolManifest struct {
 	Params      map[string]ToolParamDef   `json:"params"`
 
 	// Set by the loader.
-	ScriptPath string `json:"-"`
+	ScriptPath string `json:"-"` // disk-loaded tools
+	Script     string `json:"-"` // inline script from DB (used when ScriptPath is empty)
 	AppName    string `json:"-"`
 }
 

@@ -3,8 +3,6 @@ package api
 import (
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -403,11 +401,6 @@ func (a *API) createStoreApp(c *gin.Context) {
 		return
 	}
 
-	// Write disk files and reload registry.
-	if err := WriteStoreAppToDisk(app, a.AppRegistry.AppsDir()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write app to disk: " + err.Error()})
-		return
-	}
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 
@@ -428,11 +421,72 @@ func (a *API) createStoreApp(c *gin.Context) {
 	c.JSON(http.StatusCreated, app)
 }
 
+// getBuilderChat reconstructs the builder chat history from session records.
+// Each session has prompt (user message) and result (AI response).
+//
+//	GET /api/my/apps/:id/chat
+func (a *API) getBuilderChat(c *gin.Context) {
+	user := auth.GetUser(c)
+	id := c.Param("id")
+
+	var app models.StoreApp
+	if err := a.DB.First(&app, "(id = ? OR name = ?) AND author_id = ?", id, id, user.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "app not found"})
+		return
+	}
+
+	var sessions []models.Session
+	a.DB.Where("agent = ? AND user_id = ?", app.Name, user.ID).
+		Order("created_at ASC").Find(&sessions)
+
+	type chatMsg struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
+	messages := make([]chatMsg, 0, len(sessions)*2)
+	var claudeSessionID string
+	for _, s := range sessions {
+		if s.Prompt != "" {
+			messages = append(messages, chatMsg{Role: "user", Content: s.Prompt})
+		}
+		if s.Result != "" {
+			messages = append(messages, chatMsg{Role: "assistant", Content: s.Result})
+		}
+		if s.ClaudeSessionID != "" {
+			claudeSessionID = s.ClaudeSessionID
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"messages":          messages,
+		"claude_session_id": claudeSessionID,
+	})
+}
+
+// deleteBuilderChat deletes the builder chat history for an app so the user can start fresh.
+//
+//	DELETE /api/my/apps/:id/chat
+func (a *API) deleteBuilderChat(c *gin.Context) {
+	user := auth.GetUser(c)
+	id := c.Param("id")
+
+	var app models.StoreApp
+	if err := a.DB.First(&app, "(id = ? OR name = ?) AND author_id = ?", id, id, user.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "app not found"})
+		return
+	}
+
+	a.DB.Where("agent = ? AND user_id = ?", app.Name, user.ID).Delete(&models.Session{})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (a *API) getMyStoreApp(c *gin.Context) {
 	user := auth.GetUser(c)
 	id := c.Param("id")
 	var app models.StoreApp
-	if err := a.DB.First(&app, "id = ? AND author_id = ?", id, user.ID).Error; err != nil {
+	// Look up by ID or name so routes can use either (e.g. /my-apps/weather-monitor/builder)
+	if err := a.DB.First(&app, "(id = ? OR name = ?) AND author_id = ?", id, id, user.ID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "app not found"})
 		return
 	}
@@ -484,8 +538,6 @@ func (a *API) updateStoreApp(c *gin.Context) {
 		return
 	}
 
-	// Re-write disk files and reload.
-	WriteStoreAppToDisk(app, a.AppRegistry.AppsDir())
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 
@@ -504,11 +556,12 @@ func (a *API) deleteStoreApp(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Delete all reviews for this app.
+	// Clean up all related records.
 	a.DB.Where("app_id = ?", id).Delete(&models.AppReview{})
+	a.DB.Where("app_id = ?", id).Delete(&models.AppShare{})
+	a.DB.Where("app_name = ?", app.Name).Delete(&models.AppInstall{})
+	a.DB.Where("agent = ?", app.Name).Delete(&models.Session{})
 
-	// Remove disk directory and reload.
-	os.RemoveAll(filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 
@@ -581,7 +634,6 @@ func (a *API) addStoreTool(c *gin.Context) {
 	app.Tools = append(app.Tools, tool)
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	writeToolDisk(tool, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusCreated, tool)
@@ -609,7 +661,6 @@ func (a *API) updateStoreTool(c *gin.Context) {
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "tool not found: " + toolName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	writeToolDisk(tool, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusOK, tool)
@@ -632,7 +683,6 @@ func (a *API) deleteStoreTool(c *gin.Context) {
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "tool not found: " + toolName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	deleteToolDisk(toolName, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusOK, gin.H{"deleted": toolName})
@@ -650,7 +700,6 @@ func (a *API) addStorePrompt(c *gin.Context) {
 	app.Prompts = append(app.Prompts, prompt)
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	writePromptDisk(prompt, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusCreated, prompt)
@@ -676,7 +725,6 @@ func (a *API) updateStorePrompt(c *gin.Context) {
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "prompt not found: " + promptName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	writePromptDisk(prompt, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusOK, prompt)
@@ -699,7 +747,6 @@ func (a *API) deleteStorePrompt(c *gin.Context) {
 	if !found { c.JSON(http.StatusNotFound, gin.H{"error": "prompt not found: " + promptName}); return }
 	app.UpdatedAt = time.Now().UTC()
 	a.DB.Save(&app)
-	deletePromptDisk(promptName, filepath.Join(a.AppRegistry.AppsDir(), app.Name))
 	a.AppRegistry.Reload()
 	a.MCPFactory.Rebuild()
 	c.JSON(http.StatusOK, gin.H{"deleted": promptName})

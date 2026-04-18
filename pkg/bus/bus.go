@@ -20,12 +20,12 @@ type Bus struct {
 }
 
 // New starts an embedded NATS server with JetStream persistence.
-// Data is stored under dataDir/nats/. Listens on 127.0.0.1:4222 so
+// Data is stored under dataDir/nats/. Listens on 127.0.0.1:4225 so
 // external plugin processes can connect.
 func New(dataDir string) (*Bus, error) {
 	opts := &server.Options{
 		Host:      "127.0.0.1",
-		Port:      4222,
+		Port:      4225,
 		StoreDir:  filepath.Join(dataDir, "nats"),
 		JetStream: true,
 	}
@@ -59,13 +59,22 @@ func New(dataDir string) (*Bus, error) {
 		{Name: "WORKFLOWS", Subjects: []string{"workflow.>"}, MaxAge: 7 * 24 * time.Hour},
 		{Name: "JOBS", Subjects: []string{"job.>"}, MaxAge: 24 * time.Hour},
 		{Name: "TOOLS", Subjects: []string{"tool.>"}, MaxAge: 24 * time.Hour},
-		{Name: "EXTENSIONS", Subjects: []string{"extension.>"}, MaxAge: 24 * time.Hour},
+		// extension.register and extension.deregister use core NATS request/reply
+		// and must NOT be covered by a JetStream stream — the stream would send a
+		// PubAck to the reply inbox before the registry handler can respond.
+		// Only persist health and registered-notification subjects.
+		{Name: "EXTENSIONS", Subjects: []string{"extension.health.*", "extension.registered.*"}, MaxAge: 24 * time.Hour},
 	}
 	for _, cfg := range streams {
+		cfg := cfg
 		if _, err := js.AddStream(&cfg); err != nil {
-			conn.Close()
-			srv.Shutdown()
-			return nil, fmt.Errorf("create stream %s: %w", cfg.Name, err)
+			// Stream may already exist from a previous run — update it to pick
+			// up any subject changes (e.g. narrowing extension.> to specific subjects).
+			if _, uerr := js.UpdateStream(&cfg); uerr != nil {
+				conn.Close()
+				srv.Shutdown()
+				return nil, fmt.Errorf("create/update stream %s: %w", cfg.Name, uerr)
+			}
 		}
 	}
 

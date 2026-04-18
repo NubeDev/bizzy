@@ -158,11 +158,22 @@ func (r *OllamaRunner) Run(ctx context.Context, cfg RunConfig, sessionID string,
 	}
 	result.Model = model
 
-	// Build initial messages.
+	// Build initial messages — use stored history for multi-turn resume,
+	// or start fresh with system prompt for new sessions.
 	var messages []ollamaMessage
-	if cfg.SystemPrompt != "" {
-		messages = append(messages, ollamaMessage{Role: "system", Content: cfg.SystemPrompt})
+	if len(cfg.History) > 0 {
+		// Resume: replay stored conversation history (includes system prompt from first turn)
+		for _, h := range cfg.History {
+			messages = append(messages, ollamaMessage{Role: h.Role, Content: h.Content})
+		}
+		log.Printf("[ollama] resuming with %d history messages", len(cfg.History))
+	} else {
+		// New session: start with system prompt
+		if cfg.SystemPrompt != "" {
+			messages = append(messages, ollamaMessage{Role: "system", Content: cfg.SystemPrompt})
+		}
 	}
+	// Always append the new user message
 	messages = append(messages, ollamaMessage{Role: "user", Content: cfg.Prompt})
 
 	// Try to connect to MCP and fetch tools for the agent loop.

@@ -9,6 +9,7 @@ const navItems = [
   { label: "My Apps", url: "/my-apps" },
   { label: "Create", url: "/my-apps/create" },
   { label: "Workshop", url: "/workshop" },
+  { label: "Plugins", url: "/plugins" },
 ]
 
 export function AppShell() {

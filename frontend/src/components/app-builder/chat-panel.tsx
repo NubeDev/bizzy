@@ -3,7 +3,7 @@
  * Drives AI generation. Renders markdown + syntax-highlighted code blocks.
  */
 import { useState, useRef, useEffect, useCallback } from "react"
-import { ArrowUp, Loader2, Sparkles, Trash2, User, Copy, Check } from "lucide-react"
+import { ArrowUp, ChevronDown, ChevronRight, Loader2, Sparkles, Trash2, User, Copy, Check } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -45,14 +45,34 @@ interface Props {
   /** When set, auto-sends this message as a fix/update request then clears it */
   pendingMessage?: string | null
   onPendingMessageConsumed?: () => void
+  /** App name — tags sessions so chat history can be loaded on next visit */
+  appName?: string
+  /** Pre-loaded chat history from the backend */
+  initialMessages?: ChatMessage[]
+  /** Claude session ID for resuming the conversation */
+  initialClaudeSessionId?: string
+  /** Called when user clears chat — parent should call DELETE /api/my/apps/:id/chat */
+  onClearHistory?: () => void
 }
 
-export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPendingMessageConsumed }: Props) {
-  const { messages, isStreaming, send, clear } = useAgentChat()
+export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPendingMessageConsumed, appName, initialMessages, initialClaudeSessionId, onClearHistory }: Props) {
+  const { messages, isStreaming, send, clear } = useAgentChat({
+    appName,
+    initialMessages,
+    initialClaudeSessionId,
+  })
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [processedMsgs, setProcessedMsgs] = useState<Set<number>>(new Set())
+  // Track how many messages came from loaded history — these render collapsed
+  const loadedCountRef = useRef(0)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  useEffect(() => {
+    if (initialMessages?.length && loadedCountRef.current === 0) {
+      loadedCountRef.current = initialMessages.length
+    }
+  }, [initialMessages])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -114,10 +134,10 @@ export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPending
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-border flex items-center justify-between shrink-0">
-        <span className="text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">AI Architect</span>
+      <div className="px-4 h-10 border-b border-border flex items-center justify-between shrink-0">
+        <span className="text-xs font-mono font-medium uppercase tracking-wider" style={{ color: "#6366f1" }}>Chat</span>
         {messages.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => { clear(); setProcessedMsgs(new Set()) }}
+          <Button variant="ghost" size="sm" onClick={() => { clear(); setProcessedMsgs(new Set()); onClearHistory?.() }}
             className="text-muted-foreground hover:text-foreground rounded-none text-[11px] h-6">
             <Trash2 size={10} className="mr-1" /> Clear
           </Button>
@@ -130,9 +150,27 @@ export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPending
           <EmptyChat onSuggestion={setInput} />
         ) : (
           <div className="p-3 space-y-4">
-            {messages.map((msg, i) => (
-              <ChatBubble key={i} message={msg} isLast={i === messages.length - 1} isStreaming={isStreaming} />
-            ))}
+            {/* Loaded history — collapsed by default */}
+            {loadedCountRef.current > 0 && (
+              <>
+                <button
+                  onClick={() => setHistoryExpanded(prev => !prev)}
+                  className="flex items-center gap-1.5 w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors font-mono"
+                >
+                  {historyExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  Previous session ({loadedCountRef.current} messages)
+                </button>
+                {historyExpanded && messages.slice(0, loadedCountRef.current).map((msg, i) => (
+                  <ChatBubble key={`h-${i}`} message={msg} isLast={false} isStreaming={false} />
+                ))}
+                {!historyExpanded && <div className="border-b border-border/50" />}
+              </>
+            )}
+            {/* New messages (or all messages if no history) */}
+            {messages.slice(loadedCountRef.current).map((msg, i) => {
+              const idx = loadedCountRef.current + i
+              return <ChatBubble key={idx} message={msg} isLast={idx === messages.length - 1} isStreaming={isStreaming} />
+            })}
           </div>
         )}
       </div>
@@ -151,7 +189,8 @@ export function ChatPanel({ project, onFilesGenerated, pendingMessage, onPending
             disabled={isStreaming}
           />
           <button onClick={handleSend} disabled={!input.trim() || isStreaming}
-            className="shrink-0 w-7 h-7 rounded-none bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-30 hover:opacity-50 transition-opacity">
+            className="shrink-0 w-7 h-7 rounded-none text-white flex items-center justify-center disabled:opacity-30 hover:opacity-80 transition-opacity"
+            style={{ background: "#6366f1" }}>
             {isStreaming ? <Loader2 size={12} className="animate-spin" /> : <ArrowUp size={12} />}
           </button>
         </div>
@@ -172,7 +211,7 @@ function EmptyChat({ onSuggestion }: { onSuggestion: (s: string) => void }) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-4 py-8">
-      <Sparkles size={24} className="text-muted-foreground/40 mb-3" />
+      <Sparkles size={24} className="mb-3" style={{ color: "#6366f1" }} />
       <p className="text-xs text-muted-foreground text-center mb-4">
         Describe your app and the AI will generate the full project.
       </p>
@@ -194,7 +233,7 @@ function ChatBubble({ message, isLast, isStreaming }: { message: ChatMessage; is
   if (message.role === 'user') {
     return (
       <div className="flex items-start gap-2">
-        <div className="w-5 h-5 rounded-none bg-primary flex items-center justify-center shrink-0 mt-0.5">
+        <div className="w-5 h-5 rounded-none flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#f472b6" }}>
           <User size={10} className="text-white" />
         </div>
         <div className="flex-1 min-w-0">
@@ -214,8 +253,8 @@ function ChatBubble({ message, isLast, isStreaming }: { message: ChatMessage; is
 
   return (
     <div className="flex items-start gap-2 group">
-      <div className="w-5 h-5 rounded-none bg-foreground flex items-center justify-center shrink-0 mt-0.5">
-        <Sparkles size={10} className="text-background" />
+      <div className="w-5 h-5 rounded-none flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#6366f1" }}>
+        <Sparkles size={10} className="text-white" />
       </div>
       <div className="flex-1 min-w-0 space-y-2">
         {/* Copy entire message button */}

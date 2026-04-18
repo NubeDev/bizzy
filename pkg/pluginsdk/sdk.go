@@ -142,7 +142,7 @@ func NewPlugin(name, ver, description string) *Plugin {
 		ver:          ver,
 		description:  description,
 		tools:        make(map[string]Tool),
-		natsURL:      envOrDefault("NATS_URL", "nats://127.0.0.1:4222"),
+		natsURL:      envOrDefault("NATS_URL", "nats://127.0.0.1:4225"),
 		heartbeatSec: 10,
 		logger:       log.New(os.Stderr, fmt.Sprintf("[%s] ", name), log.LstdFlags),
 	}
@@ -185,7 +185,7 @@ func (p *Plugin) SetPreamble(s string) *Plugin {
 	return p
 }
 
-// SetNATSURL overrides the NATS URL (default: $NATS_URL or nats://127.0.0.1:4222).
+// SetNATSURL overrides the NATS URL (default: $NATS_URL or nats://127.0.0.1:4225).
 func (p *Plugin) SetNATSURL(url string) *Plugin {
 	p.natsURL = url
 	return p

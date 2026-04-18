@@ -160,6 +160,7 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.GET("/api/agents", a.listAgents)
 	authed.POST("/api/agents/tools/:name", a.callTool)
 	authed.GET("/api/agents/sessions", a.listSessions)
+	authed.GET("/api/agents/sessions/app/:name", a.getLatestAppSession)
 	authed.GET("/api/agents/sessions/:id", a.getSession)
 	authed.GET("/api/agents/providers", a.listProviders)
 	authed.POST("/api/agents/run/sync", a.runAgentREST)
@@ -277,6 +278,8 @@ func (a *API) SetupRouter() *gin.Engine {
 	myApps.GET("/:id", a.getMyStoreApp)
 	myApps.PUT("/:id", a.updateStoreApp)
 	myApps.DELETE("/:id", a.deleteStoreApp)
+	myApps.GET("/:id/chat", a.getBuilderChat)
+	myApps.DELETE("/:id/chat", a.deleteBuilderChat)
 	myApps.POST("/:id/publish", a.publishStoreApp)
 	myApps.PATCH("/:id/visibility", a.setStoreAppVisibility)
 

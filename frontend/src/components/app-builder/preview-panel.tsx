@@ -18,11 +18,15 @@ interface Props {
   selectedFile: AppFile | null
   /** Called when "Fix with AI" or "Update UI to Match Data" is clicked — sends a message to the AI chat */
   onRequestFix?: (message: string) => void
+  /** App name for session persistence — use the route param, not project.name (which loads async) */
+  appName?: string
 }
 
-export function PreviewPanel({ project, selectedFile, onRequestFix }: Props) {
-  const uiFiles = project.files.filter(f => f.type === "tsx")
-  const toolPairs = getToolPairs(project)
+export function PreviewPanel({ project, selectedFile, onRequestFix, appName: appNameProp }: Props) {
+  // Use explicit prop (from route param, available immediately) or fall back to project.name (async)
+  const appName = appNameProp || project.name || undefined
+  const uiFiles = useMemo(() => project.files.filter(f => f.type === "tsx"), [project.files])
+  const toolPairs = useMemo(() => getToolPairs(project), [project.files])
   const [toolResults, setToolResults] = useState<Map<string, unknown>>(new Map())
 
   const defaultTab = selectedFile?.type === "tsx" ? "ui"
@@ -89,6 +93,7 @@ export function PreviewPanel({ project, selectedFile, onRequestFix }: Props) {
                     toolRunFn={builderToolRunFn}
                     onRequestFix={onRequestFix ? (msg) => onRequestFix(enrichFixMessage(msg, toolResults)) : undefined}
                     onToolResult={handleToolResult}
+                    appName={appName}
                   />
                 </div>
               ) : (
@@ -98,6 +103,7 @@ export function PreviewPanel({ project, selectedFile, onRequestFix }: Props) {
                   toolRunFn={builderToolRunFn}
                   onRequestFix={onRequestFix ? (msg) => onRequestFix(enrichFixMessage(msg, toolResults)) : undefined}
                   onToolResult={handleToolResult}
+                  appName={appName}
                 />
               )}
 
@@ -125,12 +131,13 @@ export function PreviewPanel({ project, selectedFile, onRequestFix }: Props) {
 }
 
 /** Renders a pre-compiled component with error boundary and tool wiring */
-function MultiFileRenderer({ Component, code, toolRunFn, onRequestFix, onToolResult }: {
+function MultiFileRenderer({ Component, code, toolRunFn, onRequestFix, onToolResult, appName }: {
   Component: React.FC<Record<string, unknown>>
   code: string
   toolRunFn: (toolName: string, params?: Record<string, unknown>) => Promise<unknown>
   onRequestFix?: (message: string) => void
   onToolResult?: (toolName: string, data: unknown) => void
+  appName?: string
 }) {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)
@@ -177,7 +184,7 @@ function MultiFileRenderer({ Component, code, toolRunFn, onRequestFix, onToolRes
       onError={setRenderError}
       onRequestFix={onRequestFix ? (err) => onRequestFix(buildFixMessage(err)) : undefined}
     >
-      <ToolRunProvider runFn={toolRunFn} onResult={onToolResult}>
+      <ToolRunProvider runFn={toolRunFn} onResult={onToolResult} appName={appName}>
         <Component />
       </ToolRunProvider>
     </PreviewErrorBoundary>
@@ -195,19 +202,23 @@ function enrichFixMessage(message: string, toolResults: Map<string, unknown>): s
 }
 
 /** Multi-file preview — compiles all TSX files with cross-referencing and renders the main component */
-function MultiFilePreview({ files, toolRunFn, onRequestFix, onToolResult }: {
+function MultiFilePreview({ files, toolRunFn, onRequestFix, onToolResult, appName }: {
   files: AppFile[]
   toolRunFn: (toolName: string, params?: Record<string, unknown>) => Promise<unknown>
   onRequestFix?: (message: string) => void
   onToolResult?: (toolName: string, data: unknown) => void
+  appName?: string
 }) {
+  // Use content-based key so recompilation only happens when file content actually changes,
+  // not when the files array gets a new reference (e.g. from parent re-rendering on tool results)
+  const filesKey = files.map(f => f.path + "\0" + f.content).join("\0\0")
   const compiled = useMemo(() => {
     const namedFiles = files.map(f => ({
       name: f.path.replace("ui/", "").replace(".tsx", ""),
       code: f.content,
     }))
     return compileMultiFile(namedFiles)
-  }, [files])
+  }, [filesKey])
 
   const { main, mainName, subErrors } = compiled
   const MainComponent = main.Component
@@ -283,6 +294,7 @@ function MultiFilePreview({ files, toolRunFn, onRequestFix, onToolResult }: {
           toolRunFn={toolRunFn}
           onRequestFix={onRequestFix}
           onToolResult={onToolResult}
+          appName={appName}
         />
       ) : (
         <div className="text-xs text-muted-foreground p-4">No component to render.</div>

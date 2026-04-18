@@ -1,0 +1,12 @@
+{
+  "name": "check_weather",
+  "description": "Get current weather conditions for a single city including temperature, humidity, wind speed, and description.",
+  "toolClass": "read-only",
+  "params": {
+    "city": {
+      "type": "string",
+      "required": true,
+      "description": "City name to check weather for"
+    }
+  }
+}

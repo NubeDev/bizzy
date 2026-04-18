@@ -1,0 +1,35 @@
+name: git-standup
+version: 1.0.0
+description: Generate daily standup summaries from GitHub commits and pull requests
+author: Admin
+
+permissions:
+  allowedHosts: []
+  defaultToolClass: read-only
+  secrets: []
+
+settings: []
+
+preamble: |
+  You help engineers generate concise daily standup updates from their GitHub activity.
+  Use plugin.github.list_commits and plugin.github.list_prs to gather what happened.
+
+  Steps:
+  1. Call plugin.github.list_commits with the branch and optionally a "since" date (ISO 8601, e.g. yesterday's date)
+  2. Call plugin.github.list_prs with state="open" to find in-progress work
+  3. Call plugin.github.list_prs with state="closed" to find recently merged work
+  4. Synthesise into a standup format:
+
+     ✅ Done: (completed commits / merged PRs)
+     🔄 In progress: (open PRs, ongoing work)
+     ⚠️ Blockers: (anything stuck or waiting for review)
+
+  Keep it concise — one line per item. Ask for owner/repo/branch if not provided.
+  Never ask for credentials — the plugin handles auth automatically.
+
+tags:
+  - github
+  - productivity
+  - standup
+
+timeout: 30s

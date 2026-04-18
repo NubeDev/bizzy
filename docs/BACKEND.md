@@ -33,17 +33,18 @@ Returns `{workspace, user, token}`. Use the token as `Authorization: Bearer <tok
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (Phase 3) |
 | `GEMINI_API_KEY` | — | Gemini API key (Phase 3) |
 
-Apps live at `$NUBE_DATA_DIR/apps/`. There is no separate apps directory env var.
+System apps (shipped with the code) live at `$NUBE_DATA_DIR/apps/`. User-created apps (via the store/builder) are **DB-only** — no disk files.
 
 ---
 
 ## Data storage
 
-Everything lives under `NUBE_DATA_DIR/`:
+**Database** (SQLite via GORM) is the primary store:
 
 ```
 data/
-  apps/                    # All app disk files (system + user-created)
+  bizzy.db                 # SQLite — all models (users, workspaces, apps, installs, sessions, etc.)
+  apps/                    # System apps only (shipped with code, read-only)
     nube-admin/
       app.yaml
       tools/*.js + *.json
@@ -51,28 +52,16 @@ data/
       app.yaml
       tools/*.js + *.json
       prompts/*.md
-    weather-checker/       # Created via store API
-      app.yaml
-      tools/*.js + *.json
-      prompts/*.md
-  store_apps.json          # Metadata for ALL apps (ratings, visibility, author, etc.)
-  app_installs.json        # Per-user app installations
-  app_shares.json          # Share invites (by user or link)
-  app_reviews.json         # Ratings and comments
-  workspaces.json          # Multi-tenant workspaces
-  users.json               # Users with bearer tokens
-  sessions.json            # Agent session history (provider, model, cost, tokens)
 ```
 
-All JSON collections use `pkg/jsondb.Collection[T]` -- thread-safe, atomic writes (tmp + rename).
+**User-created apps** (via store API or App Builder) are stored entirely in the database as `StoreApp` records with tools, prompts, and UI components as JSON columns. No disk files are written for store apps.
 
 ### Startup migrations
 
 On startup the server runs:
 
 1. **Session provider backfill**: existing sessions without a `provider` field get `provider="claude"`.
-2. **Store-to-disk migration**: any `StoreApp` record with inline tools/prompts but no disk directory gets its files written to `data/apps/`.
-3. **Disk-to-store sync**: any app on disk without a `store_apps.json` record gets one auto-created (visibility=public, author from app.yaml).
+2. **Disk-to-store sync**: system apps on disk without a DB record get one auto-created (visibility=public, author from app.yaml).
 
 ---
 
@@ -167,7 +156,7 @@ Bearer token middleware on all routes except `/health` and `/bootstrap`.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/admin/reload-apps` | Reload apps from disk + rebuild MCP cache |
+| `POST` | `/admin/reload-apps` | Reload app registry + rebuild MCP cache |
 
 ---
 

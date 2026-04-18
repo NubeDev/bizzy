@@ -219,6 +219,60 @@ func (s *AgentService) ListAgents(userID string) []AgentInfo {
 	return agents
 }
 
+// LoadChatHistory loads the stored conversation history for a session.
+// Returns nil if no history exists (e.g. first call, or Claude provider).
+func (s *AgentService) LoadChatHistory(sessionID string) ([]airunner.HistoryMessage, error) {
+	var history models.ChatHistory
+	if err := s.DB.First(&history, "session_id = ?", sessionID).Error; err != nil {
+		return nil, err
+	}
+	out := make([]airunner.HistoryMessage, len(history.Messages))
+	for i, m := range history.Messages {
+		out[i] = airunner.HistoryMessage{Role: m.Role, Content: m.Content}
+	}
+	return out, nil
+}
+
+// SaveChatHistory persists conversation messages for multi-turn resume.
+// Called after each run for stateless providers (Ollama, OpenAI, etc.).
+func (s *AgentService) SaveChatHistory(sessionID, appName, provider, userID string, messages []airunner.HistoryMessage) {
+	chatMsgs := make([]models.ChatMessage, len(messages))
+	for i, m := range messages {
+		chatMsgs[i] = models.ChatMessage{Role: m.Role, Content: m.Content}
+	}
+	history := models.ChatHistory{
+		SessionID: sessionID,
+		AppName:   appName,
+		Messages:  chatMsgs,
+		Provider:  provider,
+		UserID:    userID,
+		UpdatedAt: time.Now().UTC(),
+	}
+	s.DB.Save(&history)
+}
+
+// LatestSessionForApp returns the resume ID for the most recent session of an app.
+// For Claude: returns the ClaudeSessionID. For others: returns the ChatHistory session ID.
+func (s *AgentService) LatestSessionForApp(appName, userID string) (string, error) {
+	// Try Claude first — look for the most recent session with a claude_session_id
+	var session models.Session
+	err := s.DB.Where("agent = ? AND user_id = ? AND claude_session_id != ''", appName, userID).
+		Order("created_at DESC").First(&session).Error
+	if err == nil && session.ClaudeSessionID != "" {
+		return session.ClaudeSessionID, nil
+	}
+
+	// Try ChatHistory (for Ollama and other stateless providers)
+	var history models.ChatHistory
+	err = s.DB.Where("app_name = ? AND user_id = ?", appName, userID).
+		Order("updated_at DESC").First(&history).Error
+	if err == nil {
+		return history.SessionID, nil
+	}
+
+	return "", fmt.Errorf("no session found for app %s", appName)
+}
+
 // convertToolCallLog converts airunner entries to model entries.
 func convertToolCallLog(entries []airunner.ToolCallEntry) []models.ToolCallEntry {
 	if len(entries) == 0 {

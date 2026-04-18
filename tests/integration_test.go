@@ -65,7 +65,7 @@ func setupEnv(t *testing.T) *testEnv {
 		t.Fatalf("open database: %v", err)
 	}
 
-	registry, err := apps.NewRegistry(appsDir)
+	registry, err := apps.NewRegistry(db, appsDir)
 	if err != nil {
 		t.Fatalf("load apps: %v", err)
 	}

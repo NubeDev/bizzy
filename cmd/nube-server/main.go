@@ -46,11 +46,8 @@ func main() {
 	// Migrate: backfill provider="claude" on existing sessions that have no provider set.
 	migrateSessionProvider(db)
 
-	// Migrate: store apps with inline content but no disk files → write to disk.
-	migrateStoreAppsToDisk(db, appsDir)
-
-	// Load app registry from disk.
-	registry, err := apps.NewRegistry(appsDir)
+	// Load app registry from disk + database.
+	registry, err := apps.NewRegistry(db, appsDir)
 	if err != nil {
 		log.Fatalf("failed to load apps: %v", err)
 	}

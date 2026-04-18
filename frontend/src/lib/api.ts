@@ -6,6 +6,7 @@ import type {
   AppReview,
   CreateAppRequest,
   StoreQuery,
+  PluginSummary,
 } from './types'
 
 class ApiError extends Error {
@@ -193,6 +194,24 @@ class ApiClient {
       cost_usd: number
       created_at: string
     }[]>('/api/agents/sessions')
+  }
+
+  // Plugins
+  plugins(service?: string) {
+    const q = service ? `?service=${encodeURIComponent(service)}` : ''
+    return this.request<{ api_version: string; plugins: PluginSummary[] }>(`/api/plugins${q}`)
+  }
+  plugin(name: string) {
+    return this.request<{ api_version: string; plugin: PluginSummary; manifest: unknown }>(`/api/plugins/${name}`)
+  }
+  disablePlugin(name: string) {
+    return this.request<{ status: string }>(`/api/plugins/${name}/disable`, { method: 'POST' })
+  }
+  enablePlugin(name: string) {
+    return this.request<{ status: string }>(`/api/plugins/${name}/enable`, { method: 'POST' })
+  }
+  deletePlugin(name: string) {
+    return this.request<{ status: string }>(`/api/plugins/${name}`, { method: 'DELETE' })
   }
 
   // Run a prompt via the agent API

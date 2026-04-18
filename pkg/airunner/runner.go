@@ -18,6 +18,13 @@ const (
 	ProviderCopilot   Provider = "copilot"
 )
 
+// HistoryMessage is a single message in a conversation history,
+// used for multi-turn resume with stateless providers (Ollama, OpenAI, etc.).
+type HistoryMessage struct {
+	Role    string `json:"role"`    // "system", "user", "assistant", "tool"
+	Content string `json:"content"`
+}
+
 // RunConfig is the provider-agnostic configuration for a run.
 type RunConfig struct {
 	Prompt       string `json:"prompt"`
@@ -29,6 +36,7 @@ type RunConfig struct {
 	Model          string `json:"model,omitempty"`            // Model override (e.g. "o4-mini", "gpt-4.1")
 	ThinkingBudget string `json:"thinking_budget,omitempty"` // Thinking level: "low", "medium", "high", or token count
 	WorkDir        string `json:"work_dir,omitempty"`        // Working directory for the CLI process
+	History        []HistoryMessage `json:"-"`               // Pre-loaded conversation history for stateless providers
 }
 
 // Event is a normalised event emitted by any provider.

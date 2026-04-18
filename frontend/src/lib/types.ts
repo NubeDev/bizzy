@@ -133,3 +133,16 @@ export interface CreateAppRequest {
   color?: string
 }
 
+export interface PluginSummary {
+  name: string
+  version: string
+  description?: string
+  services: string[]
+  status: string
+  registered_at: string
+  last_heartbeat?: string
+  health_failures: number
+  tool_count: number
+  prompt_count: number
+}
+

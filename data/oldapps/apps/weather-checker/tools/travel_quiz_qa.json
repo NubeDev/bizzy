@@ -1,0 +1,31 @@
+{
+  "name": "travel_quiz_qa",
+  "description": "Guided travel safety quiz — asks your city and activity, fetches live weather, then quizzes you on what to do.",
+  "toolClass": "read-only",
+  "mode": "qa",
+  "params": {
+    "_submit": {
+      "type": "boolean",
+      "required": false,
+      "description": "Set true to submit answers"
+    },
+    "answer": {
+      "type": "string",
+      "required": false,
+      "description": "Your answer (A, B, C, or D)",
+      "order": 3
+    },
+    "city": {
+      "type": "string",
+      "required": false,
+      "description": "City name",
+      "order": 1
+    },
+    "scenario": {
+      "type": "string",
+      "required": false,
+      "description": "Activity type",
+      "order": 2
+    }
+  }
+}

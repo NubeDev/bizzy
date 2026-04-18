@@ -26,7 +26,8 @@ The App Builder is a bolt.new-style IDE for building NubeIO apps. It has three p
 
 **Routes:**
 - `/my-apps/create` — new app (empty project)
-- `/my-apps/:id/builder` — edit existing app in builder
+- `/my-apps/create/:id` — load existing app by name or ID into builder
+- `/my-apps/:id/builder` — edit existing app in builder (same component)
 - `/my-apps/:id/edit` — traditional editor (tabs: AI Workshop, Tools, Prompts, etc.)
 
 ---
@@ -39,8 +40,8 @@ The App Builder is a bolt.new-style IDE for building NubeIO apps. It has three p
 frontend/src/
 ├── components/
 │   ├── app-builder/              # Three-panel builder
-│   │   ├── builder-layout.tsx    # Main layout, save/load, state orchestration
-│   │   ├── chat-panel.tsx        # AI chat, file extraction, auto-fix messaging
+│   │   ├── builder-layout.tsx    # Main layout, save/load, state orchestration, chat history loading
+│   │   ├── chat-panel.tsx        # AI chat, file extraction, auto-fix messaging, session persistence
 │   │   ├── file-tree.tsx         # Directory-grouped virtual file tree
 │   │   ├── file-editor.tsx       # Code editor with line numbers, preview toggles
 │   │   ├── preview-panel.tsx     # Live UI preview + tool test + data inspector
@@ -49,7 +50,7 @@ frontend/src/
 │   │
 │   ├── live-preview/             # Live React component renderer
 │   │   ├── renderer.tsx          # Sucrase transpiler, SCOPE injection, error boundary, multi-file compilation
-│   │   └── hooks.tsx             # useToolRunner, usePromptRunner, ToolRunProvider
+│   │   └── hooks.tsx             # useToolRunner, usePromptRunner, ToolRunProvider, PromptSessionContext
 │   │
 │   ├── shared/                   # Reusable components
 │   │   ├── tool-tester.tsx       # Params form + run + output (used everywhere)
@@ -60,6 +61,9 @@ frontend/src/
 │       ├── ai-tool-editor.tsx    # Inline AI editor for a single tool
 │       ├── tool-history.tsx      # Revision history UI
 │       └── streaming-feedback.tsx # Streaming text display
+│
+├── hooks/
+│   └── use-agent-chat.ts         # WebSocket chat hook with session resume + initial message support
 │
 ├── lib/
 │   └── tool-naming.ts            # TOOL_NAMING_RULES constant (shared across prompts)
@@ -89,6 +93,83 @@ interface AppProject {
   files: AppFile[]
 }
 ```
+
+---
+
+## Session Memory & Chat History
+
+### Overview
+
+The builder supports persistent AI sessions across page reloads. Two separate systems:
+
+1. **Builder chat** (left panel) — the AI Architect conversation that generates code
+2. **Preview prompts** (right panel) — `usePromptRunner()` calls inside AI-generated components
+
+Both persist sessions so the AI remembers previous context.
+
+### Builder Chat Persistence
+
+**How it works:**
+
+1. `useAgentChat({ appName, initialMessages, initialClaudeSessionId })` sends `agent: appName` in every WebSocket request
+2. The backend tags each `Session` record with `Agent = appName`
+3. On page load, `builder-layout.tsx` fetches `GET /api/my/apps/:id/chat` which reconstructs the conversation from session records
+4. Previous messages are passed as `initialMessages` to `ChatPanel` → `useAgentChat`
+5. `useAgentChat` uses `useEffect` to update messages when `initialMessages` arrives async (since `useState` only uses initial values on mount)
+6. The `claude_session_id` is also restored so subsequent messages use `--resume` for context
+
+**Clear button:** Calls `DELETE /api/my/apps/:id/chat` which deletes all session records for the app, giving the user a fresh start.
+
+**Timing consideration:** The chat history fetch is async. `ChatPanel` renders immediately with empty messages, then updates when the fetch completes. The `useEffect` in `useAgentChat` handles this late arrival pattern.
+
+### Preview Prompt Session Persistence
+
+**How it works:**
+
+1. `ToolRunProvider` accepts `appName` prop and creates a `PromptSessionContext`
+2. On mount, fetches `GET /api/agents/sessions/app/:name` to get the latest resume session ID
+3. Also reads from `localStorage` as an instant fallback
+4. `usePromptRunner()` reads the session ID from context and sends `session_id` + `app` with each request
+5. After each response, saves the new session ID to both the context ref and `localStorage`
+
+**Provider-agnostic design:**
+- **Claude:** Uses `claude_session_id` for `--resume` (Claude CLI manages state)
+- **Ollama/others:** Uses `session_id` to load server-side `ChatHistory` (conversation replayed from DB)
+
+**Stale closure handling:** `sessionCtxRef` (a ref to the context) ensures the memoized `run()` callback always reads the latest `storageKey` and `appName`, even though `useCallback` has `[]` deps.
+
+### Backend Models
+
+```go
+// ChatHistory — stores conversation for stateless providers (Ollama, OpenAI, etc.)
+type ChatHistory struct {
+    SessionID string        `gorm:"primaryKey"`
+    AppName   string        `gorm:"index"`
+    Messages  []ChatMessage `gorm:"serializer:json"`
+    Provider  string
+    UserID    string        `gorm:"index"`
+    UpdatedAt time.Time
+}
+
+// Session — audit record for every AI run (all providers)
+type Session struct {
+    ID              string
+    Agent           string   // app name — used for chat history lookup
+    ClaudeSessionID string   // for --resume
+    Prompt          string   // user message
+    Result          string   // AI response
+    // ... provider, model, cost, tokens, etc.
+}
+```
+
+### Session API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/my/apps/:id/chat` | Load builder chat history (reconstructed from sessions) |
+| `DELETE` | `/api/my/apps/:id/chat` | Delete all sessions for app (fresh start) |
+| `GET` | `/api/agents/sessions/app/:name` | Get latest resume session ID for an app |
+| `POST` | `/api/agents/run/sync` | Run prompt (accepts `session_id` + `app` for resume/tagging) |
 
 ---
 
@@ -179,6 +260,14 @@ The prompt includes:
 3. Component renders inside a `PreviewErrorBoundary`
 4. If it crashes, shows compile error or render error with **Fix with AI** button
 
+### Memoization & Stability
+
+The preview uses content-based memoization to prevent unnecessary recompilation:
+
+- `PreviewPanel` memoizes `uiFiles` and `toolPairs` with `useMemo([project.files])` so tool result state changes don't cause re-renders
+- `MultiFilePreview` uses a content-based `filesKey` (file paths + content joined) as the `useMemo` dependency instead of array reference equality
+- This prevents the compiled component from being unmounted/remounted when parent state changes (e.g., Data Inspector updates), which would destroy all hook state inside the component
+
 ### SCOPE — What AI-Generated Components Can Use
 
 All of these are available without imports:
@@ -246,7 +335,7 @@ function Dashboard() {
 
 **In the AI Workshop** (saved app): calls `POST /api/agents/tools/:name` via the MCP agent endpoint.
 
-### usePromptRunner — Connect UI to Claude
+### usePromptRunner — Connect UI to AI
 
 ```tsx
 const ai = usePromptRunner()
@@ -254,22 +343,34 @@ ai.run("What should I wear?", { conditions: JSON.stringify(weather.data) })
 // ai.text = "Bring a jacket, it's 13°C with wind..."
 ```
 
-Calls `POST /api/agents/run/sync`. Has a 60-second timeout. Accepts `Record<string, unknown>` args — objects get JSON.stringify'd automatically.
+Calls `POST /api/agents/run/sync`. Has a 60-second timeout. Supports multi-turn session resume — sends `session_id` and `app` automatically when inside a `ToolRunProvider` with `appName`.
 
-### ToolRunProvider — Context-Based Tool Execution
+**Provider support:**
+- **Claude:** `session_id` maps to `--resume` for native multi-turn
+- **Ollama/others:** `session_id` maps to server-side `ChatHistory` (full message replay)
 
-`ToolRunProvider` wraps the AI component and injects a custom tool runner function. This lets `useToolRunner()` work in the builder (calling test-tool endpoint) without a saved app.
+### ToolRunProvider — Context-Based Tool Execution & Session Management
+
+`ToolRunProvider` wraps the AI component and provides two contexts:
+
+1. **ToolRunContext** — injects a custom tool runner function so `useToolRunner()` works in the builder
+2. **PromptSessionContext** — manages session persistence for `usePromptRunner()` across component remounts and page reloads
 
 ```tsx
-<ToolRunProvider runFn={builderToolRunFn} onResult={handleToolResult}>
+<ToolRunProvider runFn={builderToolRunFn} onResult={handleToolResult} appName="weather-monitor">
   <Component />
 </ToolRunProvider>
 ```
 
+Props:
 - `runFn` — the function to call when `tool.run()` is invoked
 - `onResult` — optional callback fired (as a microtask) after each tool run completes, used to populate the Data Inspector
+- `appName` — tags sessions and controls localStorage key for prompt session persistence
 
-`onResult` is stored in a ref to avoid changing the context identity. The context value (`wrappedFn`) only changes when `runFn` changes, keeping the component tree stable.
+**Session loading on mount:**
+1. Reads from `localStorage` (instant, synchronous)
+2. Fetches from `GET /api/agents/sessions/app/:name` (authoritative, async)
+3. Whichever arrives, sets `promptSessionRef.current` for `usePromptRunner` to read
 
 ---
 
@@ -427,6 +528,16 @@ When the user clicks "Save App":
 - `tools/<name>.js` — from `StoreTool.script` (one per tool)
 - `prompts/<name>.md` — from `StorePrompt` with YAML frontmatter
 - `ui/<name>.tsx` — from `UIComponent.code`
+
+### App Selector Navigation
+
+When selecting an app from the top bar dropdown, the builder navigates to `/my-apps/create/:name`. This:
+- Sets `existingAppId` from the route param (available immediately, no async wait)
+- Triggers `useMyApp(existingAppId)` to fetch the app data
+- Loads chat history via `GET /api/my/apps/:id/chat`
+- The `appName` prop flows through to `ToolRunProvider` for session persistence
+
+The backend `getMyStoreApp` handler accepts both UUIDs and app names (`id = ? OR name = ?`).
 
 ---
 
@@ -598,7 +709,10 @@ Every tool must define: `function handle(params) { ... return result }`
 |--------|------|---------|
 | `POST` | `/api/my/apps` | Create new app |
 | `PUT` | `/api/my/apps/:id` | Update app (metadata, permissions, uiComponents) |
-| `GET` | `/api/my/apps/:id` | Load app (includes tools, prompts, uiComponents) |
+| `GET` | `/api/my/apps/:id` | Load app by ID or name (includes tools, prompts, uiComponents) |
+| `DELETE` | `/api/my/apps/:id` | Delete app |
+| `GET` | `/api/my/apps/:id/chat` | Load builder chat history (from session records) |
+| `DELETE` | `/api/my/apps/:id/chat` | Clear builder chat history (fresh start) |
 | `POST` | `/api/my/apps/:id/tools` | Add tool |
 | `PUT` | `/api/my/apps/:id/tools/:name` | Update tool (accepts X-Change-Summary header) |
 | `DELETE` | `/api/my/apps/:id/tools/:name` | Delete tool |
@@ -607,6 +721,7 @@ Every tool must define: `function handle(params) { ... return result }`
 | `DELETE` | `/api/my/apps/:id/prompts/:name` | Delete prompt |
 | `POST` | `/api/apps/test-tool` | Run JS script in sandbox (no saved app needed) |
 | `POST` | `/api/agents/tools/:name` | Call a saved tool via MCP agent |
-| `POST` | `/api/agents/run/sync` | Send prompt to Claude (sync response) |
+| `POST` | `/api/agents/run/sync` | Send prompt to AI (accepts `session_id` + `app` for resume) |
+| `GET` | `/api/agents/sessions/app/:name` | Get latest resume session ID for an app |
 | `GET` | `/api/my/apps/:id/revisions/:type/:name` | List revision history |
 | `POST` | `/api/my/apps/:id/revisions/:type/:name/revert/:rev` | Revert to revision |

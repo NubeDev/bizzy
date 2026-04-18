@@ -20,6 +20,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, Cloud, Droplets,
   Loader2, MapPin, Play, RefreshCw, Search, Star, Sun, Thermometer, Wind,
@@ -59,6 +61,18 @@ function get(obj: unknown, path: string, fallback: unknown = undefined): unknown
     current = (current as Record<string, unknown>)[key]
   }
   return current !== undefined ? current : fallback
+}
+
+/**
+ * Markdown — renders markdown text with GFM support (tables, strikethrough, etc.).
+ * Available to AI-generated components as <Markdown>{text}</Markdown>
+ */
+function Markdown({ children, className }: { children: string; className?: string }) {
+  return (
+    <div className={`prose prose-sm max-w-none dark:prose-invert ${className || ""}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children || ""}</ReactMarkdown>
+    </div>
+  )
 }
 
 // The scope object — everything AI-generated code can access
@@ -102,6 +116,9 @@ const SCOPE: Record<string, unknown> = {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
   Skeleton,
 
+  // Markdown renderer
+  Markdown,
+
   // Icons
   AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, Cloud, Droplets,
   Loader2, MapPin, Play, RefreshCw, Search, Star, Sun, Thermometer, Wind,
@@ -119,6 +136,8 @@ interface LivePreviewProps {
   onRequestFix?: (message: string) => void
   /** Called when a tool run completes inside the preview, captures results for data inspector */
   onToolResult?: (toolName: string, data: unknown) => void
+  /** App name — passed to ToolRunProvider for session persistence across page reloads */
+  appName?: string
 }
 
 interface CompileResult {
@@ -306,7 +325,7 @@ export class PreviewErrorBoundary extends React.Component<
 /**
  * LivePreview renders AI-generated React code in real-time.
  */
-export function LivePreview({ code, componentProps, className, toolRunFn, onRequestFix, onToolResult }: LivePreviewProps) {
+export function LivePreview({ code, componentProps, className, toolRunFn, onRequestFix, onToolResult, appName }: LivePreviewProps) {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)
 
@@ -388,7 +407,7 @@ export function LivePreview({ code, componentProps, className, toolRunFn, onRequ
       ) : (
         <PreviewErrorBoundary key={code} onError={setRenderError} onRequestFix={onRequestFix ? (err) => onRequestFix(buildFixMessage(err)) : undefined}>
           {toolRunFn ? (
-            <ToolRunProvider runFn={toolRunFn} onResult={onToolResult}>
+            <ToolRunProvider runFn={toolRunFn} onResult={onToolResult} appName={appName}>
               <Component {...(componentProps || {})} />
             </ToolRunProvider>
           ) : (
@@ -430,6 +449,11 @@ useState, useEffect, useMemo, useCallback, useRef
   Use: var cities = get(data, "cities", [])    // returns real array, can .map()
   Use: var temp = get(data, "wind.speed", 0)   // returns number
   Use: {str(get(data, "name", "?"))}           // wrap with str() for JSX display
+
+### Markdown Rendering
+**Markdown** — renders markdown text with GFM support (tables, lists, bold, etc.)
+  Use: <Markdown>{ai.text}</Markdown>
+  Use: <Markdown className="text-sm">{str(someMarkdownString)}</Markdown>
 
 ### UI Components (shadcn)
 Button, Input, Label, Textarea, Badge, Separator, Skeleton

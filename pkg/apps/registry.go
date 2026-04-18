@@ -5,21 +5,26 @@ import (
 	"log"
 	"os"
 	"sync"
+
+	"github.com/NubeDev/bizzy/pkg/models"
+	"gorm.io/gorm"
 )
 
-// Registry holds all available apps loaded from disk.
+// Registry holds all available apps loaded from disk and the database.
 type Registry struct {
 	mu       sync.RWMutex
+	db       *gorm.DB
 	appsDirs []string
 	apps     map[string]*App           // keyed by app name
 	prompts  map[string][]Prompt       // keyed by app name
 	tools    map[string][]ToolManifest // keyed by app name
 }
 
-// NewRegistry scans the apps directories and loads all valid apps.
+// NewRegistry scans the apps directories and loads store apps from the database.
 // The first directory is the "primary" used for system app CRUD.
-func NewRegistry(appsDirs ...string) (*Registry, error) {
+func NewRegistry(db *gorm.DB, appsDirs ...string) (*Registry, error) {
 	r := &Registry{
+		db:       db,
 		appsDirs: appsDirs,
 		apps:     make(map[string]*App),
 		prompts:  make(map[string][]Prompt),
@@ -35,6 +40,7 @@ func (r *Registry) scan() error {
 	for _, dir := range r.appsDirs {
 		r.scanDir(dir)
 	}
+	r.loadStoreApps()
 	return nil
 }
 
@@ -87,6 +93,118 @@ func (r *Registry) scanDir(dir string) {
 
 		log.Printf("[apps] loaded: %s v%s (openapi=%v prompts=%d jstools=%d)",
 			app.Name, app.Version, app.HasOpenAPI, len(r.prompts[app.Name]), len(r.tools[app.Name]))
+	}
+}
+
+// loadStoreApps queries the database for store apps and merges them into the
+// registry. Disk apps take priority — only store apps whose name doesn't
+// already exist in the registry are added.
+func (r *Registry) loadStoreApps() {
+	if r.db == nil {
+		return
+	}
+
+	var storeApps []models.StoreApp
+	if err := r.db.Find(&storeApps).Error; err != nil {
+		log.Printf("[apps] failed to load store apps from DB: %v", err)
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	added := 0
+	for _, sa := range storeApps {
+		// Disk apps win on name collisions.
+		if _, exists := r.apps[sa.Name]; exists {
+			continue
+		}
+
+		// Build an App from the StoreApp.
+		app := &App{
+			Name:        sa.Name,
+			Version:     sa.Version,
+			Description: sa.Description,
+			Author:      sa.AuthorName,
+			Permissions: Permissions{
+				AllowedHosts:     sa.Permissions.AllowedHosts,
+				DefaultToolClass: sa.Permissions.DefaultToolClass,
+				Secrets:          sa.Permissions.Secrets,
+			},
+			HasTools:   len(sa.Tools) > 0,
+			HasPrompts: len(sa.Prompts) > 0,
+		}
+		// Convert settings.
+		for _, s := range sa.Settings {
+			app.Settings = append(app.Settings, SettingDef{
+				Key:      s.Key,
+				Label:    s.Label,
+				Type:     s.Type,
+				Required: s.Required,
+				Default:  s.Default,
+			})
+		}
+
+		r.apps[sa.Name] = app
+
+		// Convert tools.
+		if len(sa.Tools) > 0 {
+			var manifests []ToolManifest
+			for _, st := range sa.Tools {
+				m := ToolManifest{
+					Name:        st.Name,
+					Description: st.Description,
+					ToolClass:   st.ToolClass,
+					Mode:        st.Mode,
+					Script:      st.Script,
+					AppName:     sa.Name,
+					Params:      make(map[string]ToolParamDef),
+				}
+				if m.ToolClass == "" {
+					m.ToolClass = sa.Permissions.DefaultToolClass
+				}
+				for pName, p := range st.Params {
+					m.Params[pName] = ToolParamDef{
+						Type:        p.Type,
+						Required:    p.Required,
+						Description: p.Description,
+						Options:     p.Options,
+					}
+				}
+				manifests = append(manifests, m)
+			}
+			r.tools[sa.Name] = manifests
+		}
+
+		// Convert prompts.
+		if len(sa.Prompts) > 0 {
+			var prompts []Prompt
+			for _, sp := range sa.Prompts {
+				p := Prompt{
+					Name:        sp.Name,
+					Description: sp.Description,
+					Body:        sp.Body,
+					AppName:     sa.Name,
+				}
+				for _, arg := range sp.Arguments {
+					p.Arguments = append(p.Arguments, PromptArgument{
+						Name:        arg.Name,
+						Description: arg.Description,
+						Required:    arg.Required,
+					})
+				}
+				prompts = append(prompts, p)
+			}
+			r.prompts[sa.Name] = prompts
+		}
+
+		added++
+		log.Printf("[apps] loaded from DB: %s v%s (prompts=%d jstools=%d)",
+			sa.Name, sa.Version, len(sa.Prompts), len(sa.Tools))
+	}
+
+	if added > 0 {
+		log.Printf("[apps] loaded %d store apps from DB", added)
 	}
 }
 
@@ -145,7 +263,10 @@ func (r *Registry) Reload() error {
 	r.tools = newTools
 	r.mu.Unlock()
 
-	log.Printf("[apps] reloaded: %d apps", len(newApps))
+	// Layer DB apps on top (disk apps win on collision).
+	r.loadStoreApps()
+
+	log.Printf("[apps] reloaded: %d apps", len(r.apps))
 	return nil
 }
 

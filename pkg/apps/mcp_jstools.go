@@ -69,7 +69,15 @@ func (f *MCPFactory) registerJSTools(srv *mcp.Server, app *App, install models.A
 				json.Unmarshal(raw, &params)
 			}
 
-			result, err := runtime.Execute(manifest.ScriptPath, params)
+			var result map[string]any
+			var err error
+			if manifest.Script != "" {
+				// DB-loaded tool: execute inline script directly.
+				result, err = runtime.ExecuteScript(manifest.Script, "", params)
+			} else {
+				// Disk-loaded tool: execute from file.
+				result, err = runtime.Execute(manifest.ScriptPath, params)
+			}
 			if err != nil {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{&mcp.TextContent{Text: "error: " + err.Error()}},

@@ -10,7 +10,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { Allotment } from "allotment"
 import "allotment/dist/style.css"
 import { Save, Loader2, Check } from "lucide-react"
-import { useCreateApp, useAddTool, useAddPrompt, useUpdateApp, useUpdateTool, useMyApp, useMyApps } from "@/hooks/use-my-apps"
+import { useCreateApp, useAddTool, useAddPrompt, useUpdateApp, useUpdateTool, useUpdatePrompt, useMyApp, useMyApps } from "@/hooks/use-my-apps"
 import { ChatPanel } from "./chat-panel"
 import { FileTree } from "./file-tree"
 import { FileEditor, EmptyEditor } from "./file-editor"
@@ -63,6 +63,9 @@ export function AppBuilder() {
   const [seeded, setSeeded] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
 
+  // Builder chat history — loaded from backend so conversation persists across page reloads
+  const [chatHistory, setChatHistory] = useState<{ messages: { role: string; content: string }[]; claude_session_id: string } | null>(null)
+
   // Seed project from existing app when loaded
   useEffect(() => {
     if (existingApp && !seeded) {
@@ -72,10 +75,21 @@ export function AppBuilder() {
     }
   }, [existingApp, seeded])
 
+  // Load builder chat history for existing apps
+  useEffect(() => {
+    if (!existingAppId) return
+    fetch(`/api/my/apps/${encodeURIComponent(existingAppId)}/chat`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.messages?.length) setChatHistory(data) })
+      .catch(() => {})
+  }, [existingAppId])
+
   const createAppMutation = useCreateApp()
   const updateAppMutation = useUpdateApp()
   const addToolMutation = useAddTool()
+  const updateToolMutation = useUpdateTool()
   const addPromptMutation = useAddPrompt()
+  const updatePromptMutation = useUpdatePrompt()
 
   const selectedFile = project.files.find(f => f.path === selectedPath) || null
 
@@ -151,7 +165,7 @@ export function AppBuilder() {
     }))
   }, [])
 
-  // Save the project as a real app
+  // Save the project as a real app (handles both create and update)
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -168,40 +182,61 @@ export function AppBuilder() {
         if (descMatch) description = descMatch[1].trim()
       }
 
-      // Create the app
-      const app = await createAppMutation.mutateAsync({
-        name: appName,
-        displayName: appName.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
-        description,
-        category,
-      })
+      let appId = savedId
 
-      // Add tools (parse .json + .js pairs)
+      if (appId) {
+        // --- UPDATE existing app ---
+        await updateAppMutation.mutateAsync({
+          id: appId,
+          data: { description, category },
+        })
+      } else {
+        // --- CREATE new app ---
+        const app = await createAppMutation.mutateAsync({
+          name: appName,
+          displayName: appName.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+          description,
+          category,
+        })
+        appId = app.id
+      }
+
+      // Collect existing tool/prompt names so we know whether to add or update
+      const existingToolNames = new Set(existingApp?.tools?.map(t => t.name) || [])
+      const existingPromptNames = new Set(existingApp?.prompts?.map(p => p.name) || [])
+
+      // Save tools (parse .json + .js pairs)
       const helpers = project.files.find(f => f.path === "tools/_helpers.js")?.content || ""
 
       for (const f of project.files) {
         if (f.type !== "json" || !f.path.startsWith("tools/")) continue
-        const toolName = f.path.replace("tools/", "").replace(".json", "")
-        const jsFile = project.files.find(j => j.path === `tools/${toolName}.js`)
+        const toolFileName = f.path.replace("tools/", "").replace(".json", "")
+        const jsFile = project.files.find(j => j.path === `tools/${toolFileName}.js`)
         if (!jsFile) continue
 
         try {
           const schema = JSON.parse(f.content)
-          await addToolMutation.mutateAsync({
-            appId: app.id,
-            tool: {
-              name: schema.name || toolName,
-              description: schema.description || "",
-              toolClass: schema.toolClass || "read-only",
-              mode: schema.mode || "",
-              params: schema.params || {},
-              script: helpers ? helpers + "\n\n" + jsFile.content : jsFile.content,
-            },
-          })
+          const toolName = schema.name || toolFileName
+          const toolData = {
+            name: toolName,
+            description: schema.description || "",
+            toolClass: schema.toolClass || "read-only",
+            mode: schema.mode || "",
+            params: schema.params || {},
+            script: helpers ? helpers + "\n\n" + jsFile.content : jsFile.content,
+          }
+
+          if (existingToolNames.has(toolName)) {
+            await updateToolMutation.mutateAsync({
+              appId: appId!, name: toolName, tool: toolData, changeSummary: "builder save",
+            })
+          } else {
+            await addToolMutation.mutateAsync({ appId: appId!, tool: toolData })
+          }
         } catch { /* skip invalid json */ }
       }
 
-      // Add prompts (parse .md frontmatter)
+      // Save prompts (parse .md frontmatter)
       for (const f of project.files) {
         if (f.type !== "md" || !f.path.startsWith("prompts/")) continue
         const frontmatterMatch = f.content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
@@ -211,16 +246,21 @@ export function AppBuilder() {
         const body = frontmatterMatch[2].trim()
         const nameMatch = fm.match(/^name:\s*(.+)$/m)
         const descMatch = fm.match(/^description:\s*(.+)$/m)
+        if (!nameMatch) continue
 
-        if (nameMatch) {
-          await addPromptMutation.mutateAsync({
-            appId: app.id,
-            prompt: {
-              name: nameMatch[1].trim(),
-              description: descMatch?.[1]?.trim() || "",
-              body,
-            },
+        const promptName = nameMatch[1].trim()
+        const promptData = {
+          name: promptName,
+          description: descMatch?.[1]?.trim() || "",
+          body,
+        }
+
+        if (existingPromptNames.has(promptName)) {
+          await updatePromptMutation.mutateAsync({
+            appId: appId!, name: promptName, prompt: promptData,
           })
+        } else {
+          await addPromptMutation.mutateAsync({ appId: appId!, prompt: promptData })
         }
       }
 
@@ -232,9 +272,8 @@ export function AppBuilder() {
           code: f.content,
         }))
 
-      // Update app metadata + UI components
       await updateAppMutation.mutateAsync({
-        id: app.id,
+        id: appId!,
         data: {
           description,
           longDescription: description.length >= 20 ? description : undefined,
@@ -242,7 +281,7 @@ export function AppBuilder() {
         },
       })
 
-      setSavedId(app.id)
+      setSavedId(appId)
     } catch (err) {
       console.error("Save failed:", err)
     } finally {
@@ -258,8 +297,8 @@ export function AppBuilder() {
         savedId={savedId}
         saving={saving}
         onSave={handleSave}
-        onLoadApp={(app) => { setProject(appToProject(app)); setSavedId(app.id); setSeeded(true); setSelectedPath(app.tools?.length ? `tools/${app.tools[0].name}.js` : "app.yaml") }}
-        onNewApp={() => { setProject(emptyProject()); setSavedId(null); setSeeded(false); setSelectedPath(null) }}
+        onLoadApp={(app) => { navigate(`/my-apps/create/${app.name}`); setProject(appToProject(app)); setSavedId(app.id); setSeeded(true); setSelectedPath(app.tools?.length ? `tools/${app.tools[0].name}.js` : "app.yaml") }}
+        onNewApp={() => { navigate('/my-apps/create'); setProject(emptyProject()); setSavedId(null); setSeeded(false); setSelectedPath(null) }}
       />
 
       {/* Three-panel resizable layout */}
@@ -272,6 +311,24 @@ export function AppBuilder() {
               onFilesGenerated={handleFilesGenerated}
               pendingMessage={pendingMessage}
               onPendingMessageConsumed={() => setPendingMessage(null)}
+              appName={existingAppId || project.name || undefined}
+              initialMessages={chatHistory?.messages?.map(m => {
+                let content = m.content
+                // Strip the system prompt prefix — sessions store the full enriched prompt,
+                // but the user only typed the short message after "User: "
+                if (m.role === 'user') {
+                  const userMatch = content.match(/\n\nUser:\s*([\s\S]+)$/)
+                  if (userMatch) content = userMatch[1].trim()
+                }
+                return { role: m.role as 'user' | 'assistant', content }
+              }) || undefined}
+              initialClaudeSessionId={chatHistory?.claude_session_id || undefined}
+              onClearHistory={() => {
+                if (existingAppId) {
+                  fetch(`/api/my/apps/${encodeURIComponent(existingAppId)}/chat`, { method: 'DELETE' }).catch(() => {})
+                }
+                setChatHistory(null)
+              }}
             />
           </Allotment.Pane>
 
@@ -293,7 +350,7 @@ export function AppBuilder() {
 
           {/* Right: Preview */}
           <Allotment.Pane preferredSize={400} minSize={250} maxSize={700}>
-            <PreviewPanel project={project} selectedFile={selectedFile} onRequestFix={setPendingMessage} />
+            <PreviewPanel project={project} selectedFile={selectedFile} onRequestFix={setPendingMessage} appName={existingAppId || project.name} />
           </Allotment.Pane>
         </Allotment>
       </div>
@@ -315,7 +372,7 @@ function TopBar({ project, savedId, saving, onSave, onLoadApp, onNewApp }: {
   return (
     <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">App Builder</span>
+        <span className="text-xs font-mono font-medium uppercase tracking-wider" style={{ color: "#6366f1" }}>AI Architect</span>
 
         {/* App selector — open existing or start new */}
         <Select
