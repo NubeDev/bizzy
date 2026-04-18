@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "nube-demo": {
-      "command": "./bin/mcpdemo",
-      "args": []
-    }
-  }
-}

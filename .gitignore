@@ -66,3 +66,7 @@ plugins/github-plugin/bizzy-github-plugin
 # Server binaries
 nube-server
 store-server
+plugins/starter-plugin/bizzy-starter-plugin
+mcpdemo/Makefile
+data/bizzy.db-shm
+data/bizzy.db-wal

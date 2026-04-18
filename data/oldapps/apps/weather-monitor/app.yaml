@@ -1,9 +1,0 @@
-name: weather-monitor
-version: 1.0.0
-description: Weather monitoring with city lookup, live conditions, forecast, and AI travel advice
-author: Admin
-permissions:
-    allowedHosts: []
-    defaultToolClass: read-only
-settings: []
-tags: []

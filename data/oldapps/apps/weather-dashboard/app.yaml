@@ -1,9 +1,0 @@
-name: weather-dashboard
-version: 1.0.0
-description: Monitor current weather conditions across multiple cities with temperature, humidity, wind, and forecasts at a glance.
-author: Admin
-permissions:
-    allowedHosts: []
-    defaultToolClass: read-only
-settings: []
-tags: []
