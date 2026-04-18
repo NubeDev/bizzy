@@ -31,7 +31,6 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 		return nil, err
 	}
 
-	a.Workflows.SetBus(eventBus)
 	agentSvc.Jobs.SetBus(eventBus)
 
 	// Wire event bus into flow engine.
@@ -60,9 +59,8 @@ func setupCommandBus(ctx context.Context, a *api.API, agentSvc *services.AgentSe
 	cmdParser := command.NewParser()
 
 	cmdRouter := command.NewRouter(command.RouterConfig{
-		Parser:    cmdParser,
-		Workflows: a.Workflows,
-		Tools:     a.ToolSvc,
+		Parser: cmdParser,
+		Tools:  a.ToolSvc,
 		Agents: &api.CommandAgentBridge{
 			AgentSvc: agentSvc,
 			Jobs:     agentSvc.Jobs,

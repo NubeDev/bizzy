@@ -35,6 +35,28 @@ func timeoutProp() *JSONSchema {
 func TriggerSchema() *JSONSchema {
 	return Object().
 		Title("Trigger Settings").
+		Property("type", String().
+			Title("Trigger Type").
+			Desc("How this flow is started.").
+			Default("manual").
+			Enum("manual", "cron", "interval", "webhook", "event").
+			Build()).
+		Property("schedule", String().
+			Title("Schedule").
+			Desc("Cron expression (e.g. '0 9 * * 1-5') for cron type, or duration (e.g. '10s', '5m', '1h') for interval type.").
+			Build()).
+		Property("webhook_path", String().
+			Title("Webhook Path").
+			Desc("URL path suffix for incoming webhooks. Only used when type is 'webhook'.").
+			Build()).
+		Property("event", String().
+			Title("Event Topic").
+			Desc("NATS topic pattern to subscribe to (e.g. 'sensor.>'). Only used when type is 'event'.").
+			Build()).
+		Property("filter", Object().
+			Title("Event Filter").
+			Desc("Key-value filter applied to incoming events. Only matching events trigger the flow.").
+			Build()).
 		Build()
 }
 
@@ -151,9 +173,11 @@ func ValueSchema() *JSONSchema {
 		Title("Value Settings").
 		Property("value", String().
 			Title("Value").
-			Desc("Static JSON value to emit. Can be a string, number, object, or array.").
-			Widget("code").
+			Desc("Static JSON value to emit. Enter raw JSON: string, number, object, or array.").
+			Widget("json").
 			Build()).
+		Property("on_error", onErrorProp()).
+		Property("timeout", timeoutProp()).
 		Build()
 }
 
@@ -233,6 +257,36 @@ func LogSchema() *JSONSchema {
 		Property("message", String().
 			Title("Message").
 			Desc("Custom log message. Leave empty to log the input value.").
+			Build()).
+		Property("on_error", onErrorProp()).
+		Property("timeout", timeoutProp()).
+		Build()
+}
+
+func CounterSchema() *JSONSchema {
+	return Object().
+		Title("Counter Settings").
+		Property("variable", String().
+			Title("Variable Name").
+			Desc("Name of the flow variable to store the count in.").
+			Default("counter").
+			Build()).
+		Property("operation", String().
+			Title("Operation").
+			Desc("What to do with the counter.").
+			Default("increment").
+			Enum("increment", "decrement", "reset", "set").
+			Build()).
+		Property("step", Integer().
+			Title("Step").
+			Desc("Amount to increment or decrement by.").
+			Default(1).
+			Min(1).
+			Build()).
+		Property("initial", Integer().
+			Title("Initial Value").
+			Desc("Starting value when the counter variable doesn't exist yet.").
+			Default(0).
 			Build()).
 		Property("on_error", onErrorProp()).
 		Property("timeout", timeoutProp()).
@@ -387,6 +441,7 @@ func BuiltinSchemas() map[string]*JSONSchema {
 		"transform":    TransformSchema(),
 		"set-variable": SetVariableSchema(),
 		"log":          LogSchema(),
+		"counter":      CounterSchema(),
 		// Integration.
 		"ai-prompt":    AIPromptSchema(),
 		"ai-runner":    AIRunnerSchema(),

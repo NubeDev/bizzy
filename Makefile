@@ -38,7 +38,6 @@ $(NUBE_SERVER_BIN):
 $(NUBE_CLI_BIN):
 	@echo "Building nube CLI..."
 	@mkdir -p $(BIN_DIR)
-	@cp api/openapi.yaml cmd/nube/openapi.yaml
 	$(GO_BUILD) $(BUILD_FLAGS) -o $(NUBE_CLI_BIN) ./cmd/nube
 
 # ---- Server management ----

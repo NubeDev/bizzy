@@ -20,18 +20,6 @@ const (
 	TopicJobFailed    = "job.failed"
 	TopicJobCancelled = "job.cancelled"
 
-	// Workflow lifecycle.
-	TopicWorkflowStarted          = "workflow.started"
-	TopicWorkflowStageStarted     = "workflow.stage.started"
-	TopicWorkflowStageCompleted   = "workflow.stage.completed"
-	TopicWorkflowStageFailed      = "workflow.stage.failed"
-	TopicWorkflowWaitingApproval  = "workflow.waiting_approval"
-	TopicWorkflowApproved         = "workflow.approved"
-	TopicWorkflowRejected         = "workflow.rejected"
-	TopicWorkflowCompleted        = "workflow.completed"
-	TopicWorkflowFailed           = "workflow.failed"
-	TopicWorkflowCancelled        = "workflow.cancelled"
-
 	// Tool lifecycle.
 	TopicToolCalled    = "tool.called"
 	TopicToolCompleted = "tool.completed"

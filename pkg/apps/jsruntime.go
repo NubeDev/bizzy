@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,6 +129,20 @@ func NewTestJSRuntime(allowedHosts []string, secrets, settings map[string]string
 	}
 }
 
+// NewFlowRuntime creates a lightweight JSRuntime for flow engine expression
+// evaluation. It has no app context, secrets, or config — just the JS VM with
+// platform APIs (HTTP, base64, crypto, etc). Use SetPluginQuery and SetToolCaller
+// to wire in additional capabilities.
+func NewFlowRuntime(timeout time.Duration) *JSRuntime {
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+	return &JSRuntime{
+		timeout:      timeout,
+		envAllowlist: DefaultEnvAllowlist,
+	}
+}
+
 // SetPluginQuery wires the plugin discovery API into this runtime.
 // When set, JS tools can use plugins.exists(), plugins.info(), plugins.list(),
 // and plugins.call() to discover and invoke plugin tools.
@@ -203,6 +218,102 @@ func (r *JSRuntime) ExecuteScript(script, helpers string, params map[string]any)
 	default:
 		return map[string]any{"result": exported}, nil
 	}
+}
+
+// EvalExpression evaluates a JS expression or function against params and returns
+// the raw result (bool, number, string, object — whatever the expression produces).
+//
+// Supports two modes:
+//   - Simple expression: "input.value > 5" — params keys are injected as globals
+//   - Full function: "function handle(params) { return params.input * 2 }" — called with params
+//
+// This is designed for flow engine nodes (condition, switch, transform) where the
+// result type matters (bool for conditions, any for transforms).
+func (r *JSRuntime) EvalExpression(expression string, params map[string]any) (any, error) {
+	if expression == "" {
+		return nil, fmt.Errorf("empty expression")
+	}
+
+	vm := goja.New()
+
+	// Inject all platform APIs so expressions can call tools, secrets, HTTP, etc.
+	r.injectHTTPAPI(vm)
+	r.injectSecretsAPI(vm)
+	r.injectConfigAPI(vm)
+	r.injectLogAPI(vm)
+	r.injectPluginsAPI(vm)
+	r.injectToolsAPI(vm)
+	r.injectBase64API(vm)
+	r.injectURLAPI(vm)
+	r.injectCryptoAPI(vm)
+	r.injectEnvAPI(vm)
+
+	// Inject params as top-level globals so "input.value > 5" works directly.
+	for k, v := range params {
+		vm.Set(k, v)
+	}
+	// Also expose the full params map as "params" for function-style expressions.
+	vm.Set("params", params)
+
+	timeout := r.timeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+
+	// Full function mode: user defines handle(params).
+	if strings.Contains(expression, "function handle") {
+		if _, err := vm.RunString(expression); err != nil {
+			return nil, fmt.Errorf("compile expression %q: %w", expression, err)
+		}
+
+		handleFn, ok := goja.AssertFunction(vm.Get("handle"))
+		if !ok {
+			return nil, fmt.Errorf("expression must define a handle(params) function")
+		}
+
+		type result struct {
+			val goja.Value
+			err error
+		}
+		done := make(chan result, 1)
+		timer := time.AfterFunc(timeout, func() {
+			vm.Interrupt("timeout: exceeded " + timeout.String())
+		})
+
+		go func() {
+			val, err := handleFn(goja.Undefined(), vm.ToValue(params))
+			done <- result{val, err}
+		}()
+
+		res := <-done
+		timer.Stop()
+		if res.err != nil {
+			return nil, fmt.Errorf("eval expression %q: %w", expression, res.err)
+		}
+		return res.val.Export(), nil
+	}
+
+	// Simple expression mode: evaluate directly with globals.
+	type result struct {
+		val goja.Value
+		err error
+	}
+	done := make(chan result, 1)
+	timer := time.AfterFunc(timeout, func() {
+		vm.Interrupt("timeout: exceeded " + timeout.String())
+	})
+
+	go func() {
+		val, err := vm.RunString(expression)
+		done <- result{val, err}
+	}()
+
+	res := <-done
+	timer.Stop()
+	if res.err != nil {
+		return nil, fmt.Errorf("eval expression %q: %w", expression, res.err)
+	}
+	return res.val.Export(), nil
 }
 
 // Execute runs a JS tool script with the given params and returns the JSON result.

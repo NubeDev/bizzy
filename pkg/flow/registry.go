@@ -219,6 +219,15 @@ func (r *NodeTypeRegistry) registerBuiltins() {
 		},
 	})
 
+	r.Register(NodeTypeDef{
+		Type: "counter", Label: "Counter", Category: "data", Source: "builtin",
+		Description: "Increments, decrements, resets, or sets a counter stored in flow variables.",
+		Ports: PortsDef{
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any"}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "object"}},
+		},
+	})
+
 	// Integration nodes
 	r.Register(NodeTypeDef{
 		Type: "ai-prompt", Label: "AI Prompt", Category: "integration", Source: "builtin",

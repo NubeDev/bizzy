@@ -18,7 +18,6 @@ import (
 	"github.com/NubeDev/bizzy/pkg/revision"
 	"github.com/NubeDev/bizzy/pkg/secrets"
 	"github.com/NubeDev/bizzy/pkg/services"
-	"github.com/NubeDev/bizzy/pkg/workflow"
 )
 
 func main() {
@@ -62,18 +61,6 @@ func main() {
 	// Build MCP factory.
 	mcpFactory := apps.NewMCPFactory(registry)
 
-	// Load workflow definitions from app directories.
-	wfStore := workflow.NewStore()
-	for _, app := range registry.List() {
-		if err := wfStore.LoadFromAppDir(app.Name, app.Dir); err != nil {
-			log.Printf("[workflows] failed to load workflows for %s: %v", app.Name, err)
-		}
-	}
-	wfCount := 0
-	for _, wfs := range wfStore.ListAll() {
-		wfCount += len(wfs)
-	}
-
 	memStore := memory.NewStore(dataDir)
 
 	runners := airunner.NewRegistry()
@@ -112,27 +99,18 @@ func main() {
 	flowEngine.SetAgents(runners)
 
 	a := &api.API{
-		DB:            db,
-		AppRegistry:   registry,
-		MCPFactory:    mcpFactory,
-		Runners:       runners,
-		Jobs:          agentSvc.Jobs,
-		Memory:        memStore,
-		WorkflowStore: wfStore,
-		AgentSvc:      agentSvc,
-		ToolSvc:       toolSvc,
-		Secrets:       secretStore,
-		Revisions:     revision.NewStore(db),
-		FlowEngine:    flowEngine,
+		DB:          db,
+		AppRegistry: registry,
+		MCPFactory:  mcpFactory,
+		Runners:     runners,
+		Jobs:        agentSvc.Jobs,
+		Memory:      memStore,
+		AgentSvc:    agentSvc,
+		ToolSvc:     toolSvc,
+		Secrets:     secretStore,
+		Revisions:   revision.NewStore(db),
+		FlowEngine:  flowEngine,
 	}
-
-	// Wire up the workflow engine (uses services, not the API directly).
-	a.Workflows = workflow.NewRunner(
-		db,
-		wfStore,
-		toolSvc,
-		promptRunner,
-	)
 
 	// --- Command Bus & Event Bus ---
 	cleanup, err := setupCommandBus(ctx, a, agentSvc, toolSvc, db, dataDir)
@@ -145,6 +123,10 @@ func main() {
 	// Apply saved provider config to runners (host overrides, etc.).
 	a.ApplyProviderConfig(a.ProviderConfigGet())
 
+	// Deploy all flows — starts trigger listeners (cron, webhook, event).
+	flowEngine.DeployAll(ctx)
+	defer flowEngine.Shutdown()
+
 	router := a.SetupRouter()
 
 	var userCount int64
@@ -152,7 +134,6 @@ func main() {
 
 	fmt.Fprintf(os.Stderr, "[nube-server] listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "[nube-server] apps: %d loaded from %s\n", len(registry.List()), appsDir)
-	fmt.Fprintf(os.Stderr, "[nube-server] workflows: %d loaded\n", wfCount)
 	fmt.Fprintf(os.Stderr, "[nube-server] flow engine: enabled (%d node types)\n", len(flowRegistry.All()))
 	fmt.Fprintf(os.Stderr, "[nube-server] database: SQLite (bizzy.db)\n")
 	if userCount == 0 {

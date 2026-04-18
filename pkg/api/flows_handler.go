@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/NubeDev/bizzy/pkg/auth"
@@ -29,6 +30,10 @@ func (a *API) createFlow(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Deploy the flow so its trigger is active.
+	a.FlowEngine.Deploy(context.Background(), &def)
+
 	c.JSON(http.StatusOK, def)
 }
 
@@ -82,11 +87,19 @@ func (a *API) updateFlow(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Re-deploy to pick up trigger changes.
+	a.FlowEngine.Deploy(context.Background(), &def)
+
 	c.JSON(http.StatusOK, def)
 }
 
 func (a *API) deleteFlow(c *gin.Context) {
 	id := c.Param("id")
+
+	// Undeploy first to stop any active trigger.
+	a.FlowEngine.Undeploy(id)
+
 	if err := a.FlowEngine.Store().DeleteFlow(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

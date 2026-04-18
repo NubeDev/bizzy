@@ -112,6 +112,32 @@ export function useRejectNode() {
   })
 }
 
+export function useLatestFlowRun(flowId: string, pollInterval: number | false) {
+  // Fetch runs list, pick the latest, then fetch its full details.
+  const runsQuery = useQuery({
+    queryKey: ['flow-runs', flowId],
+    queryFn: () => api.flowRuns(flowId),
+    enabled: !!flowId && pollInterval !== false,
+    refetchInterval: pollInterval,
+  })
+
+  const latestRunId = runsQuery.data?.[0]?.id || ''
+
+  const runQuery = useQuery({
+    queryKey: ['flow-run', latestRunId],
+    queryFn: () => api.flowRun(latestRunId),
+    enabled: !!latestRunId && pollInterval !== false,
+    refetchInterval: pollInterval,
+  })
+
+  return {
+    run: runQuery.data,
+    runId: latestRunId || null,
+    totalRuns: runsQuery.data?.length || 0,
+    isLoading: runsQuery.isLoading,
+  }
+}
+
 export function useValidateFlow() {
   return useMutation({
     mutationFn: (data: Partial<FlowDef>) => api.validateFlow(data),

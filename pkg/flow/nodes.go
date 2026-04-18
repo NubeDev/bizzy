@@ -34,6 +34,7 @@ func RegisterBuiltinExecutors(r *ExecutorRegistry) {
 	r.RegisterFunc("transform", executeTransform)
 	r.RegisterFunc("set-variable", executeSetVariable)
 	r.RegisterFunc("log", executeLog)
+	r.RegisterFunc("counter", executeCounter)
 }
 
 // --- Flow control executors ---
@@ -336,6 +337,53 @@ func executeLog(_ context.Context, ec *ExecContext) (any, error) {
 	}
 	fmt.Println(msg)
 	return ec.Inputs["input"], nil
+}
+
+func executeCounter(_ context.Context, ec *ExecContext) (any, error) {
+	varName := getStringOrDefault(ec.Node.Data, "variable", "counter")
+	operation := getStringOrDefault(ec.Node.Data, "operation", "increment")
+	step := getIntOrDefault(ec.Node.Data, "step", 1)
+	initial := getIntOrDefault(ec.Node.Data, "initial", 0)
+
+	if ec.Run.Variables == nil {
+		ec.Run.Variables = make(map[string]any)
+	}
+
+	// Read current value from flow variables, or use initial.
+	current := initial
+	if v, ok := ec.Run.Variables[varName]; ok {
+		switch n := v.(type) {
+		case int:
+			current = n
+		case float64:
+			current = int(n)
+		case int64:
+			current = int(n)
+		}
+	}
+
+	switch operation {
+	case "increment":
+		current += step
+	case "decrement":
+		current -= step
+	case "reset":
+		current = initial
+	case "set":
+		if v, ok := ec.Inputs["input"]; ok {
+			switch n := v.(type) {
+			case int:
+				current = n
+			case float64:
+				current = int(n)
+			case int64:
+				current = int(n)
+			}
+		}
+	}
+
+	ec.Run.Variables[varName] = current
+	return map[string]any{"value": current, "variable": varName}, nil
 }
 
 // --- Helpers ---

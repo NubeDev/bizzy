@@ -78,19 +78,7 @@ func Validate(def *FlowDef, registry *NodeTypeRegistry) *ValidationError {
 		edgesBySource[e.Source] = append(edgesBySource[e.Source], e)
 	}
 
-	// 4. At least one terminal node (output or error).
-	hasTerminal := false
-	for _, n := range def.Nodes {
-		if n.Type == "output" || n.Type == "error" {
-			hasTerminal = true
-			break
-		}
-	}
-	if !hasTerminal {
-		ve.add("flow must have at least one output or error terminal node")
-	}
-
-	// 5. Required ports must be connected.
+	// 4. Required ports must be connected.
 	for _, n := range def.Nodes {
 		typeDef, ok := registry.Get(n.Type)
 		if !ok {
@@ -118,9 +106,12 @@ func Validate(def *FlowDef, registry *NodeTypeRegistry) *ValidationError {
 		}
 	}
 
-	// 7. Trigger config validation.
-	if def.Trigger != nil && def.Trigger.Type == "cron" && def.Trigger.Schedule == "" {
-		ve.add("cron trigger must have a schedule")
+	// 7. Trigger config validation — read from trigger node's Data.
+	triggerData := def.TriggerConfig()
+	if triggerType, _ := triggerData["type"].(string); triggerType == "cron" || triggerType == "interval" {
+		if schedule, _ := triggerData["schedule"].(string); schedule == "" {
+			ve.add("trigger type %q requires a schedule", triggerType)
+		}
 	}
 
 	// 8. ForEach subgraph boundary validation.

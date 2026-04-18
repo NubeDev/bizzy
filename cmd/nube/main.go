@@ -35,7 +35,6 @@ func main() {
 	root.AddCommand(cli.NewProvidersCmd())
 	root.AddCommand(cli.NewJobsCmd())
 	root.AddCommand(cli.NewMemoryCmd())
-	root.AddCommand(cli.NewWorkflowCmd())
 
 	// Auto-generated commands from OpenAPI spec.
 	if err := openapi.RegisterCommands(root, specData); err != nil {

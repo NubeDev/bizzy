@@ -32,34 +32,6 @@ func NewNotifier(b *bus.Bus, db *gorm.DB, adapters command.AdapterRegistry) *Not
 
 // Start subscribes to lifecycle events and sends notifications based on user prefs.
 func (n *Notifier) Start() error {
-	// Workflow completed.
-	if _, err := n.bus.SubscribeDurable(bus.TopicWorkflowCompleted, "notifier-wf-done", func(msg *nats.Msg) {
-		n.handleEvent(msg, "on_workflow_done", func(ev eventEnvelope) string {
-			return fmt.Sprintf("Workflow %s completed", ev.TargetName)
-		})
-	}); err != nil {
-		return fmt.Errorf("subscribe workflow.completed: %w", err)
-	}
-
-	// Workflow failed.
-	if _, err := n.bus.SubscribeDurable(bus.TopicWorkflowFailed, "notifier-wf-failed", func(msg *nats.Msg) {
-		n.handleEvent(msg, "on_workflow_failed", func(ev eventEnvelope) string {
-			return fmt.Sprintf("Workflow %s failed: %s", ev.TargetName, ev.Error)
-		})
-	}); err != nil {
-		return fmt.Errorf("subscribe workflow.failed: %w", err)
-	}
-
-	// Workflow approval needed.
-	if _, err := n.bus.SubscribeDurable(bus.TopicWorkflowWaitingApproval, "notifier-wf-approval", func(msg *nats.Msg) {
-		n.handleEvent(msg, "on_approval_needed", func(ev eventEnvelope) string {
-			return fmt.Sprintf("Approval needed for %s (%s)\nReply: 'approve' or 'reject [feedback]'",
-				ev.TargetName, ev.TargetID)
-		})
-	}); err != nil {
-		return fmt.Errorf("subscribe workflow.waiting_approval: %w", err)
-	}
-
 	// Job completed.
 	if _, err := n.bus.SubscribeDurable("job.completed", "notifier-job-done", func(msg *nats.Msg) {
 		n.handleEvent(msg, "on_job_done", func(ev eventEnvelope) string {

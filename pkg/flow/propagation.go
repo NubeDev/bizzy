@@ -111,19 +111,19 @@ func isNodeReady(run *FlowRun, def *FlowDef, nodeID string, deliveredInputs map[
 	return true
 }
 
-// allTerminalsDone checks if all output/error terminal nodes have completed.
+// allTerminalsDone checks if any output/error terminal node has completed.
+// Returns false if there are no terminal nodes — the main loop's inflight==0
+// exit handles completion for flows without terminals.
 func allTerminalsDone(run *FlowRun, def *FlowDef) bool {
-	hasTerminal := false
 	for _, n := range def.Nodes {
 		if n.Type == "output" || n.Type == "error" {
-			hasTerminal = true
 			state := run.NodeStates[n.ID]
 			if state.Status == NodeCompleted || state.Status == NodeFailed || state.Status == NodeSkipped {
-				return true // At least one terminal is done.
+				return true
 			}
 		}
 	}
-	return !hasTerminal // If no terminals, consider done.
+	return false
 }
 
 // --- Error handling ---

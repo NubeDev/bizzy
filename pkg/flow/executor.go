@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
+	"github.com/NubeDev/bizzy/pkg/apps"
 	"github.com/NubeDev/bizzy/pkg/services"
 )
 
@@ -44,15 +45,21 @@ type ExecContext struct {
 	Engine *Engine
 }
 
+// JSRuntimeFactory creates a JSRuntime scoped to a user. When wired with
+// the app ecosystem, it returns a runtime with secrets, config, plugins, and
+// tool calling. When nil, the engine falls back to a bare NewFlowRuntime.
+type JSRuntimeFactory func(userID string) *apps.JSRuntime
+
 // Services bundles external dependencies that node executors may use.
 // Not every executor needs all of these — each takes what it needs.
 type Services struct {
-	Tools   services.ToolCaller
-	Prompts services.PromptRunner
-	Agents  *airunner.Registry
-	Slack   SlackSender
-	Email   EmailSender
-	Bus     EventPublisher
+	Tools      services.ToolCaller
+	Prompts    services.PromptRunner
+	Agents     *airunner.Registry
+	Slack      SlackSender
+	Email      EmailSender
+	Bus        EventPublisher
+	JSFactory  JSRuntimeFactory // creates user-scoped JS runtimes for expression eval
 }
 
 // ExecutorRegistry maps node type names to their executors.

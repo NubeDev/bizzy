@@ -16,7 +16,6 @@ import (
 	"github.com/NubeDev/bizzy/pkg/secrets"
 	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/NubeDev/bizzy/pkg/version"
-	"github.com/NubeDev/bizzy/pkg/workflow"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -30,10 +29,6 @@ type API struct {
 	Jobs        *airunner.JobStore // In-memory async job store
 
 	Memory *memory.Store // Server + per-user memory
-
-	// Workflow engine.
-	Workflows     *workflow.Runner
-	WorkflowStore *workflow.Store
 
 	// Reusable application services (decoupled from HTTP).
 	AgentSvc *services.AgentService
@@ -281,15 +276,6 @@ func (a *API) SetupRouter() *gin.Engine {
 		flowRuns.POST("/:runId/reject/:nodeId", a.rejectFlowNode)
 		flowRuns.POST("/:runId/cancel", a.cancelFlowRun)
 	}
-
-	// --- Workflows ---
-	wf := authed.Group("/api/workflows")
-	wf.POST("/run", a.runWorkflow)
-	wf.GET("/definitions", a.listWorkflowDefs)
-	wf.GET("", a.listWorkflowRuns)
-	wf.GET("/:id", a.getWorkflowRun)
-	wf.POST("/:id/approve", a.approveWorkflow)
-	wf.POST("/:id/cancel", a.cancelWorkflow)
 
 	// --- App Store ---
 

@@ -5,7 +5,6 @@ go 1.25.5
 require (
 	github.com/NubeIO/openapi-mcp v0.0.0-00010101000000-000000000000
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
-	github.com/expr-lang/expr v1.17.8
 	github.com/getkin/kin-openapi v0.135.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/jsonschema-go v0.4.2

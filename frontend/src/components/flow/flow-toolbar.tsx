@@ -1,30 +1,47 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Save, Play, CheckCircle, LayoutDashboard, ChevronLeft, Pencil } from 'lucide-react'
+import { Save, CheckCircle, LayoutDashboard, ChevronLeft, Pencil, Radio } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+export type PollInterval = 1000 | 3000 | 5000 | 10000 | 30000 | false
 
 interface FlowToolbarProps {
   flowName: string
   onNameChange: (name: string) => void
   onSave: () => void
-  onRun: () => void
   onValidate: () => void
   onAutoLayout: () => void
   saving: boolean
   validationErrors?: string[]
   dirty: boolean
+  pollInterval: PollInterval
+  onPollIntervalChange: (interval: PollInterval) => void
+  totalRuns?: number
+  latestRunStatus?: string
 }
+
+const POLL_OPTIONS: { label: string; value: PollInterval }[] = [
+  { label: '1s', value: 1000 },
+  { label: '3s', value: 3000 },
+  { label: '5s', value: 5000 },
+  { label: '10s', value: 10000 },
+  { label: '30s', value: 30000 },
+  { label: 'Off', value: false },
+]
 
 export function FlowToolbar({
   flowName,
   onNameChange,
   onSave,
-  onRun,
   onValidate,
   onAutoLayout,
   saving,
   validationErrors,
   dirty,
+  pollInterval,
+  onPollIntervalChange,
+  totalRuns,
+  latestRunStatus,
 }: FlowToolbarProps) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(flowName)
@@ -84,6 +101,31 @@ export function FlowToolbar({
 
       <div className="flex-1" />
 
+      {/* Live polling status */}
+      <div className="flex items-center gap-1.5 mr-2">
+        {pollInterval !== false && (
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Radio className={cn('w-3 h-3', latestRunStatus === 'completed' ? 'text-green-400' : latestRunStatus === 'running' ? 'text-blue-400 animate-pulse' : 'text-muted-foreground')} />
+            {totalRuns !== undefined && <span>{totalRuns} runs</span>}
+          </div>
+        )}
+        <select
+          value={pollInterval === false ? 'off' : String(pollInterval)}
+          onChange={(e) => {
+            const v = e.target.value
+            onPollIntervalChange(v === 'off' ? false : (Number(v) as PollInterval))
+          }}
+          className="px-1.5 py-0.5 text-[10px] bg-background border border-border rounded text-muted-foreground"
+          title="Poll interval for live node values"
+        >
+          {POLL_OPTIONS.map((opt) => (
+            <option key={String(opt.value)} value={opt.value === false ? 'off' : String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Validation errors */}
       {validationErrors && validationErrors.length > 0 && (
         <div className="text-[10px] text-red-400 mr-2 max-w-[300px] truncate" title={validationErrors.join('\n')}>
@@ -95,10 +137,6 @@ export function FlowToolbar({
         <ToolbarButton onClick={onSave} disabled={saving || !dirty} title="Save" accent>
           <Save className="w-3.5 h-3.5" />
           <span className="text-xs">{saving ? 'Saving...' : 'Save'}</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={onRun} title="Run Flow" accent>
-          <Play className="w-3.5 h-3.5" />
-          <span className="text-xs">Run</span>
         </ToolbarButton>
       </div>
     </div>

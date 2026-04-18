@@ -24,7 +24,6 @@ var allModels = []any{
 	&models.StoreApp{},
 	&models.AppShare{},
 	&models.AppReview{},
-	&models.WorkflowRun{},
 	&models.ProviderConfig{},
 	&models.AdapterConfig{},
 	&models.NotifyPrefs{},
@@ -86,7 +85,6 @@ func importLegacyJSON(db *gorm.DB, dataDir string) {
 		{"store_apps.json", &[]models.StoreApp{}, "store_apps"},
 		{"app_shares.json", &[]models.AppShare{}, "app_shares"},
 		{"app_reviews.json", &[]models.AppReview{}, "app_reviews"},
-		{"workflow_runs.json", &[]models.WorkflowRun{}, "workflow_runs"},
 	}
 
 	for _, m := range migrations {

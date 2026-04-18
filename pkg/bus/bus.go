@@ -56,7 +56,6 @@ func New(dataDir string) (*Bus, error) {
 	// Create streams for each event domain.
 	streams := []nats.StreamConfig{
 		{Name: "COMMANDS", Subjects: []string{"command.>"}, MaxAge: 24 * time.Hour},
-		{Name: "WORKFLOWS", Subjects: []string{"workflow.>"}, MaxAge: 7 * 24 * time.Hour},
 		{Name: "JOBS", Subjects: []string{"job.>"}, MaxAge: 24 * time.Hour},
 		{Name: "TOOLS", Subjects: []string{"tool.>"}, MaxAge: 24 * time.Hour},
 		// extension.register and extension.deregister use core NATS request/reply

@@ -50,6 +50,34 @@ export function NodeConfig({ node, onChange, onClose }: NodeConfigProps) {
           />
         </Field>
 
+        {/* Trigger config */}
+        {nodeType === 'trigger' && (
+          <>
+            <Field label="Trigger Type">
+              <select
+                value={(data.config?.type as string) || 'manual'}
+                onChange={(e) => handleDataChange('type', e.target.value)}
+                className="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+              >
+                <option value="manual">Manual (API only)</option>
+                <option value="cron">Cron Schedule</option>
+                <option value="interval">Interval</option>
+              </select>
+            </Field>
+            {((data.config?.type as string) === 'cron' || (data.config?.type as string) === 'interval') && (
+              <Field label={(data.config?.type as string) === 'cron' ? 'Cron Expression' : 'Interval'}>
+                <input
+                  type="text"
+                  value={(data.config?.schedule as string) || ''}
+                  onChange={(e) => handleDataChange('schedule', e.target.value)}
+                  className="w-full px-2 py-1 text-xs bg-background border border-border rounded font-mono"
+                  placeholder={(data.config?.type as string) === 'cron' ? '*/5 * * * *' : '10s, 5m, 1h'}
+                />
+              </Field>
+            )}
+          </>
+        )}
+
         {/* Type-specific config fields */}
         {(nodeType === 'condition' || nodeType === 'switch' || nodeType === 'transform') && (
           <Field label="Expression">

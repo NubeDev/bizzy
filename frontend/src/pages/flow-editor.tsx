@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { useFlow, useUpdateFlow, useRunFlow, useValidateFlow, useNodeTypes, useFlowRun } from '@/hooks/use-flows'
+import { useFlow, useUpdateFlow, useValidateFlow, useNodeTypes, useLatestFlowRun } from '@/hooks/use-flows'
 import { FlowCanvas, type FlowCanvasHandle } from '@/components/flow/canvas'
 import { NodePalette } from '@/components/flow/node-palette'
 import { NodeConfig } from '@/components/flow/node-config'
-import { FlowToolbar } from '@/components/flow/flow-toolbar'
+import { FlowToolbar, type PollInterval } from '@/components/flow/flow-toolbar'
 import { ExecutionOverlay, useNodeStatesForCanvas } from '@/components/flow/execution-overlay'
 import type { Node } from '@xyflow/react'
 import type { NodeTypeDef } from '@/lib/types'
@@ -14,17 +14,17 @@ export function FlowEditorPage() {
   const { data: flow, isLoading } = useFlow(id || '')
   const { data: nodeTypeCatalog } = useNodeTypes()
   const updateFlow = useUpdateFlow()
-  const runFlow = useRunFlow()
   const validateFlow = useValidateFlow()
 
   const canvasRef = useRef<FlowCanvasHandle>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [dirty, setDirty] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [pollInterval, setPollInterval] = useState<PollInterval>(5000)
 
-  const { data: activeRun } = useFlowRun(activeRunId || '')
-  const nodeStates = useNodeStatesForCanvas(activeRun)
+  // Poll latest run for this flow.
+  const { run: latestRun, runId: latestRunId, totalRuns } = useLatestFlowRun(id || '', pollInterval)
+  const nodeStates = useNodeStatesForCanvas(latestRun)
 
   const nodeTypeDefs = useMemo(() => {
     const map: Record<string, NodeTypeDef> = {}
@@ -63,17 +63,6 @@ export function FlowEditorPage() {
     }
   }, [flow, id, updateFlow])
 
-  const handleRun = useCallback(async () => {
-    if (!id) return
-    if (dirty && canvasRef.current) await handleSave()
-    try {
-      const run = await runFlow.mutateAsync({ id })
-      setActiveRunId(run.id)
-    } catch (err: any) {
-      setValidationErrors([err.message || 'Failed to start run'])
-    }
-  }, [id, dirty, handleSave, runFlow])
-
   const handleValidate = useCallback(async () => {
     if (!canvasRef.current) return
     const { nodes, edges } = canvasRef.current.getFlowData()
@@ -84,6 +73,11 @@ export function FlowEditorPage() {
       setValidationErrors([err.message])
     }
   }, [validateFlow])
+
+  const handleNodeConfigChange = useCallback((nodeId: string, data: Record<string, unknown>) => {
+    canvasRef.current?.updateNodeData(nodeId, data)
+    setSelectedNode((prev) => prev && prev.id === nodeId ? { ...prev, data: { ...prev.data, ...data } } : prev)
+  }, [])
 
   const handleAutoLayout = useCallback(() => {
     canvasRef.current?.doAutoLayout()
@@ -111,12 +105,15 @@ export function FlowEditorPage() {
         flowName={flow.name}
         onNameChange={handleNameChange}
         onSave={handleSave}
-        onRun={handleRun}
         onValidate={handleValidate}
         onAutoLayout={handleAutoLayout}
         saving={updateFlow.isPending}
         validationErrors={validationErrors}
         dirty={dirty}
+        pollInterval={pollInterval}
+        onPollIntervalChange={setPollInterval}
+        totalRuns={totalRuns}
+        latestRunStatus={latestRun?.status}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -135,14 +132,14 @@ export function FlowEditorPage() {
         {selectedNode && (
           <NodeConfig
             node={selectedNode}
-            onChange={() => { setDirty(true) }}
+            onChange={handleNodeConfigChange}
             onClose={() => setSelectedNode(null)}
           />
         )}
 
         <ExecutionOverlay
-          runId={activeRunId}
-          onClose={() => setActiveRunId(null)}
+          runId={latestRunId}
+          onClose={() => {}}
         />
       </div>
     </div>

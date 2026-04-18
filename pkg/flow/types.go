@@ -116,6 +116,18 @@ type TriggerDef struct {
 	Filter   map[string]any `json:"filter,omitempty"`
 }
 
+// TriggerConfig returns the trigger node's Data map, which holds the trigger
+// configuration (type, schedule, etc). Returns nil if no trigger node exists
+// or if the trigger is manual.
+func (f *FlowDef) TriggerConfig() map[string]any {
+	for _, n := range f.Nodes {
+		if n.Type == "trigger" {
+			return n.Data
+		}
+	}
+	return nil
+}
+
 // --- Flow Run (execution state) ---
 
 // FlowRun tracks a single execution of a flow.

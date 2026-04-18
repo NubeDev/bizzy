@@ -20,6 +20,7 @@ type Engine struct {
 	executors *ExecutorRegistry
 	services  *Services
 	events    eventEmitter
+	*runtime  // deploy/undeploy lifecycle
 
 	// Resource limits.
 	MaxParallelNodes int
@@ -36,15 +37,18 @@ func NewEngine(store *Store, registry *NodeTypeRegistry) *Engine {
 	RegisterBuiltinExecutors(executors)
 	RegisterIntegrationExecutors(executors)
 
-	return &Engine{
+	e := &Engine{
 		store:            store,
 		registry:         registry,
 		executors:        executors,
 		services:         &Services{},
+		runtime:          newRuntime(),
 		MaxParallelNodes: 50,
 		MaxRunsPerUser:   10,
 		cancels:          make(map[string]context.CancelFunc),
 	}
+	RegisterBuiltinTriggers(e)
+	return e
 }
 
 // SetServices merges non-nil fields from s into the engine's services.
@@ -163,8 +167,9 @@ func (e *Engine) StartRun(ctx context.Context, flowID, userID string, inputs map
 
 	e.events.flowStarted(run)
 
-	// Execute asynchronously.
-	go e.execute(ctx, run, def)
+	// Execute asynchronously — detach from the caller's context so the flow
+	// outlives the HTTP request that triggered it.
+	go e.execute(context.Background(), run, def)
 
 	return run, nil
 }

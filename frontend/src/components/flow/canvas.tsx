@@ -28,6 +28,7 @@ const nodeTypes: NodeTypes = {
 export interface FlowCanvasHandle {
   doAutoLayout: () => void
   getFlowData: () => { nodes: FlowNodeDef[]; edges: FlowEdgeDef[] }
+  updateNodeData: (nodeId: string, data: Record<string, unknown>) => void
 }
 
 interface FlowCanvasProps {
@@ -63,6 +64,8 @@ function toReactFlowNodes(
         status: state?.status,
         error: state?.error,
         duration_ms: state?.duration_ms,
+        inputValue: state?.input,
+        outputValue: state?.output,
       } satisfies BaseNodeData,
     }
   })
@@ -141,6 +144,40 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
+  // Merge execution state (status, values) into nodes when polling updates.
+  // Only creates new node objects when data actually changed to prevent wobble.
+  const prevStatesJson = useRef('')
+  useEffect(() => {
+    const json = JSON.stringify(nodeStates || {})
+    if (json === prevStatesJson.current) return
+    prevStatesJson.current = json
+    setNodes((nds) =>
+      nds.map((n) => {
+        const state = nodeStates?.[n.id]
+        const d = n.data as BaseNodeData
+        // Skip update if nothing changed for this node
+        if (
+          d.status === (state?.status ?? undefined) &&
+          d.error === (state?.error ?? undefined) &&
+          d.duration_ms === (state?.duration_ms ?? undefined) &&
+          d.inputValue === (state?.input ?? undefined) &&
+          d.outputValue === (state?.output ?? undefined)
+        ) return n
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            status: state?.status,
+            error: state?.error,
+            duration_ms: state?.duration_ms,
+            inputValue: state?.input,
+            outputValue: state?.output,
+          },
+        }
+      }),
+    )
+  }, [nodeStates, setNodes])
+
   // Expose handle to parent
   useImperativeHandle(ref, () => ({
     doAutoLayout: () => {
@@ -148,6 +185,12 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
       onDirty?.()
     },
     getFlowData: () => rfToFlowDef(nodes, edges),
+    updateNodeData: (nodeId: string, data: Record<string, unknown>) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n)),
+      )
+      onDirty?.()
+    },
   }), [nodes, edges, setNodes, onDirty])
 
   const onConnect: OnConnect = useCallback(
