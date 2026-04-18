@@ -15,19 +15,19 @@ const (
 
 // StoreApp represents a user-created app stored in the database.
 type StoreApp struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
+	ID          string     `json:"id" gorm:"primaryKey"`
+	Name        string     `json:"name" gorm:"uniqueIndex"`
 	DisplayName string     `json:"displayName"`
 	Description string     `json:"description"`
 	LongDesc    string     `json:"longDescription"`
 	Version     string     `json:"version"`
 	Icon        string     `json:"icon"`
 	Color       string     `json:"color"`
-	Category    string     `json:"category"`
-	Tags        []string   `json:"tags"`
+	Category    string     `json:"category" gorm:"index"`
+	Tags        []string   `json:"tags" gorm:"serializer:json"`
 
 	// Ownership.
-	AuthorID    string     `json:"authorId"`
+	AuthorID    string     `json:"authorId" gorm:"index"`
 	AuthorName  string     `json:"authorName"`
 	WorkspaceID string     `json:"workspaceId"`
 
@@ -35,10 +35,11 @@ type StoreApp struct {
 	Visibility Visibility  `json:"visibility"`
 
 	// Content.
-	Permissions Permissions  `json:"permissions"`
-	Settings    []SettingDef `json:"settings"`
-	Tools       []StoreTool  `json:"tools"`
-	Prompts     []StorePrompt `json:"prompts"`
+	Permissions  Permissions    `json:"permissions" gorm:"serializer:json"`
+	Settings     []SettingDef   `json:"settings" gorm:"serializer:json"`
+	Tools        []StoreTool    `json:"tools" gorm:"serializer:json"`
+	Prompts      []StorePrompt  `json:"prompts" gorm:"serializer:json"`
+	UIComponents []UIComponent  `json:"uiComponents,omitempty" gorm:"serializer:json"`
 
 	// Stats.
 	InstallCount   int     `json:"installCount"`
@@ -51,8 +52,6 @@ type StoreApp struct {
 	UpdatedAt   time.Time  `json:"updatedAt"`
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
 }
-
-func (s StoreApp) GetID() string { return s.ID }
 
 // Permissions declares what an app is allowed to do (reused from apps.App).
 type Permissions struct {
@@ -82,9 +81,10 @@ type StoreTool struct {
 
 // ToolParam describes a single tool parameter.
 type ToolParam struct {
-	Type        string `json:"type"`
-	Required    bool   `json:"required"`
-	Description string `json:"description"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	Description string   `json:"description"`
+	Options     []string `json:"options,omitempty"`
 }
 
 // StorePrompt is an inline prompt definition stored in the database.
@@ -93,6 +93,13 @@ type StorePrompt struct {
 	Description string           `json:"description"`
 	Arguments   []PromptArgument `json:"arguments,omitempty"`
 	Body        string           `json:"body"`
+}
+
+// UIComponent is a client-side React component stored in the database.
+// Rendered in the browser via LivePreview (sucrase + shadcn).
+type UIComponent struct {
+	Name string `json:"name"`
+	Code string `json:"code"`
 }
 
 // PromptArgument describes a single prompt argument.
@@ -105,9 +112,9 @@ type PromptArgument struct {
 // --- Reviews ---
 
 type AppReview struct {
-	ID        string    `json:"id"`
-	AppID     string    `json:"appId"`
-	UserID    string    `json:"userId"`
+	ID        string    `json:"id" gorm:"primaryKey"`
+	AppID     string    `json:"appId" gorm:"index"`
+	UserID    string    `json:"userId" gorm:"index"`
 	UserName  string    `json:"userName"`
 	Rating    int       `json:"rating"`
 	Comment   string    `json:"comment"`
@@ -115,22 +122,18 @@ type AppReview struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func (r AppReview) GetID() string { return r.ID }
-
 // --- App Shares ---
 
 // AppShare represents a share invite for a shared-visibility store app.
 type AppShare struct {
-	ID        string     `json:"id"`
-	AppID     string     `json:"appId"`
+	ID        string     `json:"id" gorm:"primaryKey"`
+	AppID     string     `json:"appId" gorm:"index"`
 	InvitedBy string     `json:"invitedBy"`
 	InviteeID string     `json:"inviteeId,omitempty"`
-	Token     string     `json:"token,omitempty"`
+	Token     string     `json:"token,omitempty" gorm:"index"`
 	CreatedAt time.Time  `json:"createdAt"`
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
-
-func (s AppShare) GetID() string { return s.ID }
 
 // --- Categories ---
 

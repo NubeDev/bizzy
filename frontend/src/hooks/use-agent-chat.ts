@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -18,12 +18,24 @@ interface AgentEvent {
   cost_usd?: number
 }
 
-export function useAgentChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+export function useAgentChat(opts?: { appName?: string; initialMessages?: ChatMessage[]; initialClaudeSessionId?: string }) {
+  const [messages, setMessages] = useState<ChatMessage[]>(opts?.initialMessages || [])
   const [isStreaming, setIsStreaming] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   // Claude CLI session ID — used for --resume on subsequent messages
-  const claudeSessionRef = useRef<string | null>(null)
+  const claudeSessionRef = useRef<string | null>(opts?.initialClaudeSessionId || null)
+  const appNameRef = useRef(opts?.appName)
+
+  // When initialMessages arrives async (after API fetch), update state.
+  // useState only uses the initial value on first mount — this handles late arrivals.
+  useEffect(() => {
+    if (opts?.initialMessages?.length) {
+      setMessages(opts.initialMessages)
+    }
+    if (opts?.initialClaudeSessionId) {
+      claudeSessionRef.current = opts.initialClaudeSessionId
+    }
+  }, [opts?.initialMessages, opts?.initialClaudeSessionId])
   const wsRef = useRef<WebSocket | null>(null)
   const assistantBufferRef = useRef('')
   const toolCallsRef = useRef<string[]>([])
@@ -73,13 +85,13 @@ export function useAgentChat() {
         case 'session':
           setSessionId(ev.session_id)
           updateLastAssistant({ status: 'thinking' })
-          // Send prompt + Claude session ID for resume
+          // Send prompt + Claude session ID for resume + agent name for history tagging
           const req: Record<string, string> = { prompt: promptToSend }
           if (resumeId) {
             req.session_id = resumeId
-            console.log('[chat] resuming claude session:', resumeId)
-          } else {
-            console.log('[chat] starting new claude session')
+          }
+          if (appNameRef.current) {
+            req.agent = appNameRef.current
           }
           ws.send(JSON.stringify(req))
           break

@@ -19,19 +19,16 @@ func (a *API) buildMCPHandler() http.Handler {
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 
-		user, ok := a.Users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-		if !ok {
+		var user models.User
+		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
 			return nil
 		}
 
 		// Get user's installed + enabled apps.
-		installs := a.AppInstalls.FindFunc(func(ai models.AppInstall) bool {
-			return ai.UserID == user.ID && ai.Enabled
-		})
+		var installs []models.AppInstall
+		a.DB.Where("user_id = ? AND enabled = ?", user.ID, true).Find(&installs)
 
-		// Build a per-user MCP server with only their tools/prompts.
-		return a.MCPFactory.BuildServer(installs)
+		// Build a per-user MCP server with only their tools/prompts + platform tools.
+		return a.MCPFactory.BuildServer(installs, a.DB, user.ID)
 	}, nil)
 }

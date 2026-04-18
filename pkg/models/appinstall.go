@@ -4,20 +4,18 @@ import "time"
 
 // AppInstall represents a user's installation of an app, including their settings.
 type AppInstall struct {
-	ID          string            `json:"id"`
-	AppName     string            `json:"appName"`
+	ID          string            `json:"id" gorm:"primaryKey"`
+	AppName     string            `json:"appName" gorm:"index"`
 	AppVersion  string            `json:"appVersion"`
 	WorkspaceID string            `json:"workspaceId"`
-	UserID      string            `json:"userId"`
+	UserID      string            `json:"userId" gorm:"index"`
 	Enabled     bool              `json:"enabled"`
-	Settings    map[string]string `json:"settings"`    // non-secret settings
-	Secrets     map[string]string `json:"secrets"`     // secret settings (TODO: encrypt at rest)
-	Stale       bool              `json:"stale"`       // true if app version on disk differs from installed version
+	Settings    map[string]string `json:"settings" gorm:"serializer:json"`    // non-secret settings
+	Secrets     map[string]string `json:"secrets" gorm:"serializer:json"`     // secret settings (TODO: encrypt at rest)
+	Stale       bool              `json:"stale"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	UpdatedAt   time.Time         `json:"updatedAt"`
 }
-
-func (a AppInstall) GetID() string { return a.ID }
 
 // GetSetting returns a setting value, checking secrets first then settings.
 func (a AppInstall) GetSetting(key string) string {

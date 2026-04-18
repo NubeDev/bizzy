@@ -1,0 +1,37 @@
+{
+  "name": "update_node",
+  "description": "Update a Rubix node's name, settings, or position. Lookup by ID or name.",
+  "toolClass": "read-write",
+  "params": {
+    "id": {
+      "type": "string",
+      "required": false,
+      "description": "Node ID to update"
+    },
+    "name": {
+      "type": "string",
+      "required": false,
+      "description": "Search by name (if id not provided)"
+    },
+    "newName": {
+      "type": "string",
+      "required": false,
+      "description": "New display name"
+    },
+    "settings": {
+      "type": "string",
+      "required": false,
+      "description": "JSON string of settings to merge (e.g. '{\"initialValue\": 10}')"
+    },
+    "x": {
+      "type": "number",
+      "required": false,
+      "description": "New X position"
+    },
+    "y": {
+      "type": "number",
+      "required": false,
+      "description": "New Y position"
+    }
+  }
+}

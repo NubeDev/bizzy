@@ -1,0 +1,17 @@
+{
+  "name": "get_node",
+  "description": "Get a Rubix node by ID or search by name. Returns node details, settings, refs, and port values.",
+  "toolClass": "read-only",
+  "params": {
+    "id": {
+      "type": "string",
+      "required": false,
+      "description": "Exact node ID"
+    },
+    "name": {
+      "type": "string",
+      "required": false,
+      "description": "Search by name (returns first match). Use id for exact lookup."
+    }
+  }
+}

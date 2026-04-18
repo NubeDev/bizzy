@@ -1,0 +1,27 @@
+{
+  "name": "query_nodes",
+  "description": "Query Rubix nodes using Haystack filter language. Always uses POST. Returns matching nodes with optional port values.",
+  "toolClass": "read-only",
+  "params": {
+    "filter": {
+      "type": "string",
+      "required": true,
+      "description": "Haystack filter (e.g. 'type is core.trigger', 'i has sensor', 'name contains Supply')"
+    },
+    "limit": {
+      "type": "number",
+      "required": false,
+      "description": "Max results (default 50)"
+    },
+    "runtime": {
+      "type": "boolean",
+      "required": false,
+      "description": "Query live runtime values (default true)"
+    },
+    "select": {
+      "type": "string",
+      "required": false,
+      "description": "Comma-separated port names to include (e.g. 'out,in1')"
+    }
+  }
+}

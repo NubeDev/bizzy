@@ -52,5 +52,17 @@ apps/nube_agent/linux/flutter/ephemeral/
 apps/nube_agent/macos/Flutter/ephemeral/
 apps/nube_agent/windows/flutter/ephemeral/
 *.iml
+
+# Bizzy runtime data
+data/bizzy.db
+data/bizzy.db-shm
+data/bizzy.db-wal
 data/sessions.json
-data/sessions.json
+data/nats/
+
+# Plugin binaries
+plugins/github-plugin/bizzy-github-plugin
+
+# Server binaries
+nube-server
+store-server

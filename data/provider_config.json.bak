@@ -1,0 +1,21 @@
+{
+  "providers": {
+    "anthropic": {
+      "enabled": false
+    },
+    "claude": {
+      "enabled": true
+    },
+    "gemini": {
+      "enabled": false
+    },
+    "ollama": {
+      "enabled": true,
+      "host": "http://localhost:11434"
+    },
+    "openai": {
+      "enabled": true,
+      "api_key": "sk-test-fake"
+    }
+  }
+}

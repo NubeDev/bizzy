@@ -1,0 +1,22 @@
+{
+  "name": "search_weekend_flights",
+  "description": "Find all Friday-to-Monday weekend flights from Da Nang (DAD) to KUL or BKK for a given month. Returns Google Flights links for live prices, typical flight times, and price estimates in VND and AUD.",
+  "toolClass": "read-only",
+  "params": {
+    "month": {
+      "type": "number",
+      "required": true,
+      "description": "Month number (1-12)"
+    },
+    "year": {
+      "type": "number",
+      "required": true,
+      "description": "Year (e.g. 2026)"
+    },
+    "destination": {
+      "type": "string",
+      "required": false,
+      "description": "Destination airport code: KUL or BKK. Omit to search both."
+    }
+  }
+}

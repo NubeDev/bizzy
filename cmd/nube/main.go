@@ -30,12 +30,21 @@ func main() {
 	root.AddCommand(cli.NewLoginCmd())
 	root.AddCommand(cli.NewLogoutCmd())
 	root.AddCommand(cli.NewAskCmd())
+	root.AddCommand(cli.NewToolsCmd())
+	root.AddCommand(cli.NewPromptsCmd())
+	root.AddCommand(cli.NewProvidersCmd())
+	root.AddCommand(cli.NewJobsCmd())
+	root.AddCommand(cli.NewMemoryCmd())
+	root.AddCommand(cli.NewWorkflowCmd())
 
 	// Auto-generated commands from OpenAPI spec.
 	if err := openapi.RegisterCommands(root, specData); err != nil {
 		fmt.Fprintf(os.Stderr, "error loading spec: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Add hand-written submit/poll to the auto-generated "agents" group.
+	cli.RegisterAgentsCmds(root)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)

@@ -176,11 +176,6 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
                 isStreaming={isStreaming}
               />
             ))}
-            {isStreaming && (
-              <div className="pl-1 py-2">
-                <BouncingBalls active={true} size={10} />
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -188,6 +183,10 @@ export function AgentChat({ systemPrompt, placeholder, suggestions, className, r
       {/* Input bar */}
       <div className="sticky bottom-0 pt-3 pb-2 px-4 bg-background">
         <div className="max-w-3xl mx-auto relative">
+          {/* Bouncing balls — always visible, active while streaming */}
+          <div className="pb-2 pl-1">
+            <BouncingBalls active={isStreaming} size={10} />
+          </div>
           {picker.isOpen && (
             <CommandPicker
               items={picker.items}

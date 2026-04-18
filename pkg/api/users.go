@@ -14,8 +14,8 @@ func (a *API) getMe(c *gin.Context) {
 }
 
 func (a *API) getUser(c *gin.Context) {
-	user, ok := a.Users.Get(c.Param("id"))
-	if !ok {
+	var user models.User
+	if err := a.DB.First(&user, "id = ?", c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
@@ -24,13 +24,13 @@ func (a *API) getUser(c *gin.Context) {
 
 func (a *API) deleteUser(c *gin.Context) {
 	id := c.Param("id")
-	// Prevent self-deletion.
 	caller := auth.GetAuthenticatedUser(c)
 	if caller.ID == id {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete yourself"})
 		return
 	}
-	if err := a.Users.Delete(id); err != nil {
+	result := a.DB.Delete(&models.User{}, "id = ?", id)
+	if result.RowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
@@ -41,19 +41,18 @@ func (a *API) rotateToken(c *gin.Context) {
 	id := c.Param("id")
 	caller := auth.GetAuthenticatedUser(c)
 
-	// Users can rotate their own token; admins can rotate anyone's.
 	if caller.Role != models.RoleAdmin && caller.ID != id {
 		c.JSON(http.StatusForbidden, gin.H{"error": "can only rotate your own token (or be admin)"})
 		return
 	}
 
-	user, ok := a.Users.Get(id)
-	if !ok {
+	var user models.User
+	if err := a.DB.First(&user, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 	user.Token = models.GenerateToken()
-	if err := a.Users.Update(user); err != nil {
+	if err := a.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -69,13 +68,13 @@ func (a *API) revokeToken(c *gin.Context) {
 		return
 	}
 
-	user, ok := a.Users.Get(id)
-	if !ok {
+	var user models.User
+	if err := a.DB.First(&user, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	user.Token = "" // revoked — user can no longer authenticate
-	if err := a.Users.Update(user); err != nil {
+	user.Token = ""
+	if err := a.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

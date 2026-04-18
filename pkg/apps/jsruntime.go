@@ -1,19 +1,83 @@
 package apps
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/dop251/goja"
 )
+
+// HTTPLogEntry records a single outbound HTTP request made during tool execution.
+type HTTPLogEntry struct {
+	Method         string  `json:"method"`
+	URL            string  `json:"url"`
+	Status         int     `json:"status"`
+	DurationMS     float64 `json:"duration_ms"`
+	RedirectedFrom *string `json:"redirected_from"`
+}
+
+// LoggingRoundTripper wraps an http.RoundTripper and records every request.
+type LoggingRoundTripper struct {
+	inner   http.RoundTripper
+	mu      sync.Mutex
+	entries []HTTPLogEntry
+}
+
+// NewLoggingRoundTripper creates a round-tripper that logs all requests.
+func NewLoggingRoundTripper(inner http.RoundTripper) *LoggingRoundTripper {
+	if inner == nil {
+		inner = http.DefaultTransport
+	}
+	return &LoggingRoundTripper{inner: inner}
+}
+
+func (t *LoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	resp, err := t.inner.RoundTrip(req)
+	dur := time.Since(start).Seconds() * 1000
+
+	entry := HTTPLogEntry{
+		Method: req.Method,
+		URL:    req.URL.String(),
+	}
+	if resp != nil {
+		entry.Status = resp.StatusCode
+	}
+	entry.DurationMS = dur
+
+	// If this request came from a redirect, record the referrer.
+	if ref := req.Header.Get("Referer"); ref != "" {
+		entry.RedirectedFrom = &ref
+	}
+
+	t.mu.Lock()
+	// Detect redirect chains: if the previous entry was a 3xx to this URL, link them.
+	if len(t.entries) > 0 {
+		prev := &t.entries[len(t.entries)-1]
+		if prev.Status >= 300 && prev.Status < 400 && entry.RedirectedFrom == nil {
+			prevURL := prev.URL
+			entry.RedirectedFrom = &prevURL
+		}
+	}
+	t.entries = append(t.entries, entry)
+	t.mu.Unlock()
+
+	return resp, err
+}
+
+// Entries returns the captured log entries.
+func (t *LoggingRoundTripper) Entries() []HTTPLogEntry {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]HTTPLogEntry, len(t.entries))
+	copy(out, t.entries)
+	return out
+}
 
 // JSRuntime executes JavaScript tools in a sandboxed Goja VM.
 type JSRuntime struct {
@@ -22,6 +86,7 @@ type JSRuntime struct {
 	config       map[string]string
 	appDir       string
 	timeout      time.Duration
+	transport    http.RoundTripper // optional custom transport for HTTP tracing
 }
 
 // NewJSRuntime creates a runtime for executing JS tools within an app.
@@ -32,6 +97,75 @@ func NewJSRuntime(app *App, secrets, config map[string]string, timeout time.Dura
 		config:       config,
 		appDir:       app.Dir,
 		timeout:      timeout,
+	}
+}
+
+// NewTestJSRuntime creates a standalone runtime for the test-tool endpoint.
+// It does not require an App on disk — everything is provided inline.
+func NewTestJSRuntime(allowedHosts []string, secrets, settings map[string]string, timeout time.Duration, transport http.RoundTripper) *JSRuntime {
+	return &JSRuntime{
+		allowedHosts: allowedHosts,
+		secrets:      secrets,
+		config:       settings,
+		timeout:      timeout,
+		transport:    transport,
+	}
+}
+
+// ExecuteScript runs inline JS source (with optional helpers) and returns the result.
+func (r *JSRuntime) ExecuteScript(script, helpers string, params map[string]any) (map[string]any, error) {
+	vm := goja.New()
+
+	r.injectHTTPAPI(vm)
+	r.injectSecretsAPI(vm)
+	r.injectConfigAPI(vm)
+	r.injectLogAPI(vm)
+	// files API omitted — test-tool has no app directory
+
+	// Load helpers first.
+	if helpers != "" {
+		if _, err := vm.RunString(helpers); err != nil {
+			return nil, fmt.Errorf("helpers error: %w", err)
+		}
+	}
+
+	if _, err := vm.RunString(script); err != nil {
+		return nil, fmt.Errorf("script error: %w", err)
+	}
+
+	handleFn, ok := goja.AssertFunction(vm.Get("handle"))
+	if !ok {
+		return nil, fmt.Errorf("script must define a handle(params) function")
+	}
+
+	type result struct {
+		val goja.Value
+		err error
+	}
+	done := make(chan result, 1)
+
+	timer := time.AfterFunc(r.timeout, func() {
+		vm.Interrupt("timeout: exceeded " + r.timeout.String())
+	})
+
+	go func() {
+		val, err := handleFn(goja.Undefined(), vm.ToValue(params))
+		done <- result{val, err}
+	}()
+
+	res := <-done
+	timer.Stop()
+
+	if res.err != nil {
+		return nil, fmt.Errorf("handle() error: %w", res.err)
+	}
+
+	exported := res.val.Export()
+	switch v := exported.(type) {
+	case map[string]any:
+		return v, nil
+	default:
+		return map[string]any{"result": exported}, nil
 	}
 }
 
@@ -113,183 +247,4 @@ func (r *JSRuntime) Execute(scriptPath string, params map[string]any) (map[strin
 		log.Printf("[jsruntime] %s completed OK", toolName)
 		return map[string]any{"result": exported}, nil
 	}
-}
-
-// --- Host API: http.* ---
-
-func (r *JSRuntime) injectHTTPAPI(vm *goja.Runtime) {
-	httpObj := vm.NewObject()
-
-	makeRequest := func(method string) func(goja.FunctionCall) goja.Value {
-		return func(call goja.FunctionCall) goja.Value {
-			if len(call.Arguments) < 1 {
-				panic(vm.NewGoError(fmt.Errorf("http.%s: url required", strings.ToLower(method))))
-			}
-			rawURL := call.Arguments[0].String()
-
-			// Enforce allowedHosts.
-			if err := CheckAllowedHost(rawURL, r.allowedHosts); err != nil {
-				panic(vm.NewGoError(err))
-			}
-
-			var bodyReader io.Reader
-			var opts map[string]any
-
-			// For methods with body (POST, PUT, PATCH): second arg is body, third is opts.
-			// For methods without body (GET, DELETE): second arg is opts.
-			if method == "POST" || method == "PUT" || method == "PATCH" {
-				if len(call.Arguments) >= 2 {
-					bodyData := call.Arguments[1].Export()
-					if bodyData != nil {
-						jsonBytes, err := json.Marshal(bodyData)
-						if err != nil {
-							panic(vm.NewGoError(fmt.Errorf("http.%s: marshal body: %w", strings.ToLower(method), err)))
-						}
-						bodyReader = bytes.NewReader(jsonBytes)
-					}
-				}
-				if len(call.Arguments) >= 3 {
-					if o, ok := call.Arguments[2].Export().(map[string]any); ok {
-						opts = o
-					}
-				}
-			} else {
-				if len(call.Arguments) >= 2 {
-					if o, ok := call.Arguments[1].Export().(map[string]any); ok {
-						opts = o
-					}
-				}
-			}
-
-			req, err := http.NewRequest(method, rawURL, bodyReader)
-			if err != nil {
-				panic(vm.NewGoError(fmt.Errorf("http.%s: create request: %w", strings.ToLower(method), err)))
-			}
-
-			if bodyReader != nil {
-				req.Header.Set("Content-Type", "application/json")
-			}
-
-			// Apply headers from opts.
-			if opts != nil {
-				if headers, ok := opts["headers"].(map[string]any); ok {
-					for k, v := range headers {
-						req.Header.Set(k, fmt.Sprintf("%v", v))
-					}
-				}
-			}
-
-			client := &http.Client{
-				Timeout: r.timeout,
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					// Re-check allowedHosts on redirect.
-					if err := CheckAllowedHost(req.URL.String(), r.allowedHosts); err != nil {
-						return err
-					}
-					return nil
-				},
-			}
-
-			resp, err := client.Do(req)
-			if err != nil {
-				panic(vm.NewGoError(fmt.Errorf("http.%s: %w", strings.ToLower(method), err)))
-			}
-			defer resp.Body.Close()
-
-			respBody, _ := io.ReadAll(resp.Body)
-
-			// Return {status, body, headers}.
-			result := vm.NewObject()
-			result.Set("status", resp.StatusCode)
-			result.Set("body", string(respBody))
-
-			respHeaders := vm.NewObject()
-			for k, vs := range resp.Header {
-				respHeaders.Set(k, strings.Join(vs, ", "))
-			}
-			result.Set("headers", respHeaders)
-
-			// Try to parse body as JSON for convenience.
-			var parsed any
-			if json.Unmarshal(respBody, &parsed) == nil {
-				result.Set("json", parsed)
-			}
-
-			return result
-		}
-	}
-
-	httpObj.Set("get", makeRequest("GET"))
-	httpObj.Set("post", makeRequest("POST"))
-	httpObj.Set("put", makeRequest("PUT"))
-	httpObj.Set("patch", makeRequest("PATCH"))
-	httpObj.Set("delete", makeRequest("DELETE"))
-
-	vm.Set("http", httpObj)
-}
-
-// --- Host API: secrets.* ---
-
-func (r *JSRuntime) injectSecretsAPI(vm *goja.Runtime) {
-	secretsObj := vm.NewObject()
-	for k, v := range r.secrets {
-		secretsObj.Set(k, v)
-	}
-	vm.Set("secrets", secretsObj)
-}
-
-// --- Host API: config.* ---
-
-func (r *JSRuntime) injectConfigAPI(vm *goja.Runtime) {
-	configObj := vm.NewObject()
-	for k, v := range r.config {
-		configObj.Set(k, v)
-	}
-	vm.Set("config", configObj)
-}
-
-// --- Host API: log.* ---
-
-func (r *JSRuntime) injectLogAPI(vm *goja.Runtime) {
-	logObj := vm.NewObject()
-	logObj.Set("info", func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) > 0 {
-			log.Printf("[js] INFO: %s", call.Arguments[0].String())
-		}
-		return goja.Undefined()
-	})
-	logObj.Set("error", func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) > 0 {
-			log.Printf("[js] ERROR: %s", call.Arguments[0].String())
-		}
-		return goja.Undefined()
-	})
-	vm.Set("log", logObj)
-}
-
-// --- Host API: files.read() ---
-
-func (r *JSRuntime) injectFilesAPI(vm *goja.Runtime) {
-	filesObj := vm.NewObject()
-	filesObj.Set("read", func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) < 1 {
-			panic(vm.NewGoError(fmt.Errorf("files.read: path required")))
-		}
-		relPath := call.Arguments[0].String()
-
-		// Prevent directory traversal.
-		cleaned := filepath.Clean(relPath)
-		if strings.HasPrefix(cleaned, "..") || filepath.IsAbs(cleaned) {
-			panic(vm.NewGoError(fmt.Errorf("files.read: path must be relative within app directory")))
-		}
-
-		fullPath := filepath.Join(r.appDir, cleaned)
-
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			panic(vm.NewGoError(fmt.Errorf("files.read: %w", err)))
-		}
-		return vm.ToValue(string(data))
-	})
-	vm.Set("files", filesObj)
 }

@@ -19,6 +19,13 @@ func CheckAllowedHost(rawURL string, allowedHosts []string) error {
 		return fmt.Errorf("outbound HTTP blocked: app has no allowedHosts")
 	}
 
+	// Global wildcard: "*" allows all outbound HTTP (used by test-tool sandbox).
+	for _, h := range allowedHosts {
+		if h == "*" {
+			return nil
+		}
+	}
+
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)

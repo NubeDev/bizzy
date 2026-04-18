@@ -1,0 +1,42 @@
+{
+  "name": "create_skill_qa",
+  "description": "Guided skill builder — walk through creating a new app with a QA tool, prompt template, and auto-generated JS.",
+  "toolClass": "read-write",
+  "mode": "qa",
+  "params": {
+    "_answers": {
+      "type": "object",
+      "required": false,
+      "description": "Accumulated answers (used internally by WS QA flow)"
+    },
+    "_submit": {
+      "type": "boolean",
+      "required": false,
+      "description": "Set true to submit form mode"
+    },
+    "skill_name": {
+      "type": "string",
+      "required": false,
+      "description": "Skill name (lowercase, hyphens)",
+      "order": 1
+    },
+    "description": {
+      "type": "string",
+      "required": false,
+      "description": "What the skill does",
+      "order": 2
+    },
+    "questions": {
+      "type": "string",
+      "required": false,
+      "description": "Comma-separated list of questions the skill should ask",
+      "order": 3
+    },
+    "output_description": {
+      "type": "string",
+      "required": false,
+      "description": "What the skill should output",
+      "order": 4
+    }
+  }
+}

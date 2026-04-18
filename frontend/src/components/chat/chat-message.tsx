@@ -1,10 +1,36 @@
-import { User, Sparkles, AlertCircle, Wrench, Loader2, Zap } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { User, Sparkles, AlertCircle, Wrench, Loader2, Zap, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { ChatMessage } from '@/hooks/use-agent-chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
+function useCopy(ms = 1800) {
+  const [copied, setCopied] = useState(false)
+  const copy = useCallback((text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), ms)
+    })
+  }, [ms])
+  return { copied, copy }
+}
+
+function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  const { copied, copy } = useCopy()
+  return (
+    <button
+      onClick={() => copy(text)}
+      title={copied ? "Copied!" : "Copy"}
+      className={`flex items-center gap-1 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 ${className}`}
+    >
+      {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+      {copied ? "copied" : "copy"}
+    </button>
+  )
+}
 
 interface Props {
   message: ChatMessage
@@ -38,7 +64,7 @@ export function ChatMessageBubble({ message, isLast, isStreaming }: Props) {
   const showCursor = isLast && isStreaming && message.status === 'streaming'
 
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 group">
       <div className="w-6 h-6 rounded-none bg-foreground flex items-center justify-center shrink-0 mt-0.5">
         <Sparkles size={12} className="text-background" />
       </div>
@@ -61,7 +87,7 @@ export function ChatMessageBubble({ message, isLast, isStreaming }: Props) {
 
         {/* Message content */}
         {message.content ? (
-          <div className="markdown-body text-sm leading-relaxed max-w-none">
+          <div className="markdown-body text-sm leading-relaxed max-w-none relative">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -102,20 +128,25 @@ export function ChatMessageBubble({ message, isLast, isStreaming }: Props) {
                   // Multi-line code block (has language or contains newlines)
                   if (match || text.includes('\n')) {
                     return (
-                      <SyntaxHighlighter
-                        style={oneDark}
-                        language={match?.[1] || 'text'}
-                        PreTag="div"
-                        customStyle={{
-                          margin: 0,
-                          borderRadius: 0,
-                          fontSize: '12px',
-                          lineHeight: '1.6',
-                          padding: '12px 16px',
-                        }}
-                      >
-                        {text}
-                      </SyntaxHighlighter>
+                      <div className="relative group/code">
+                        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 transition-opacity">
+                          <CopyButton text={text} className="bg-black/40 backdrop-blur-sm border border-white/10 rounded" />
+                        </div>
+                        <SyntaxHighlighter
+                          style={oneDark}
+                          language={match?.[1] || 'text'}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: 0,
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            padding: '12px 16px',
+                          }}
+                        >
+                          {text}
+                        </SyntaxHighlighter>
+                      </div>
                     )
                   }
 
@@ -154,6 +185,11 @@ export function ChatMessageBubble({ message, isLast, isStreaming }: Props) {
             </ReactMarkdown>
             {showCursor && (
               <span className="inline-block w-[2px] h-[14px] bg-foreground/50 animate-pulse ml-0.5 align-text-bottom" />
+            )}
+            {!isStreaming && (
+              <div className="flex justify-end mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={message.content} />
+              </div>
             )}
           </div>
         ) : null}

@@ -11,7 +11,9 @@ import (
 // bootstrap creates the first workspace and admin user.
 // Only works when no users exist — prevents re-bootstrap.
 func (a *API) bootstrap(c *gin.Context) {
-	if a.Users.Count() > 0 {
+	var userCount int64
+	a.DB.Model(&models.User{}).Count(&userCount)
+	if userCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"error": "server already bootstrapped — users exist"})
 		return
 	}
@@ -31,7 +33,7 @@ func (a *API) bootstrap(c *gin.Context) {
 		Name:      req.WorkspaceName,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := a.Workspaces.Create(ws); err != nil {
+	if err := a.DB.Create(&ws).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -45,7 +47,7 @@ func (a *API) bootstrap(c *gin.Context) {
 		Token:       models.GenerateToken(),
 		CreatedAt:   time.Now().UTC(),
 	}
-	if err := a.Users.Create(admin); err != nil {
+	if err := a.DB.Create(&admin).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

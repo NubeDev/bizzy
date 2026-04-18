@@ -16,20 +16,24 @@ The store uses the same auth as the rest of nube-server. Bootstrap an admin, the
 
 ## Architecture
 
-There is **one app system**, not two:
+**Database is the single source of truth.** Store apps are DB-only — no disk files are written or read for user-created apps.
 
 ```
-data/
-  apps/                    # Disk files for ALL apps
-    nube-marketing/        #   System app (shipped with code)
-    weather-checker/       #   User-created app (via store API or AI wizard)
-  store_apps.json          # Metadata for ALL apps (StoreApp records)
+Database (SQLite)
+  store_apps table         # StoreApp records with tools, prompts, uiComponents as JSON columns
+  app_installs table       # Per-user installations
+  app_reviews table        # Ratings and comments
+  app_shares table         # Share invites
+
+data/apps/                 # System apps only (shipped with code, read-only)
+  nube-marketing/
+    app.yaml
+    tools/*.js + *.json
 ```
 
-- **Disk files** (`data/apps/{name}/`) hold the executable content: `app.yaml`, `tools/*.js + *.json`, `prompts/*.md`.
-- **store_apps.json** holds community metadata: visibility, ratings, reviews, install counts, author info.
-- On startup, any disk app without a store record gets one auto-created.
-- When a user creates/edits an app via the API, both the JSON record and disk files are updated together.
+- **StoreApp** records hold everything: metadata, tools (with JS scripts inline), prompts, UI components, permissions, settings.
+- On startup, system apps on disk without a DB record get one auto-created.
+- When a user creates/edits an app via the API, only the DB record is updated. The registry is reloaded and MCP factory rebuilt.
 
 ---
 
@@ -37,7 +41,7 @@ data/
 
 ```
 Create (private, auto-installed for author)
-  -> add tools + prompts (disk files written, registry reloaded)
+  -> add tools + prompts (DB updated, registry reloaded)
   -> author tests immediately (tools are live via MCP and REST)
   -> optionally share with specific users or generate a link
   -> publish to store (visibility -> public, validation checks run)
@@ -61,13 +65,14 @@ Private and shared apps skip these checks.
 
 ## Data storage
 
-JSON collections in `NUBE_DATA_DIR/`:
+All store data lives in SQLite (via GORM):
 
-| File | Model | Description |
+| Table | Model | Description |
 |---|---|---|
-| `store_apps.json` | `StoreApp` | Metadata for all apps (system + user-created) |
-| `app_shares.json` | `AppShare` | Share invites (by user or link) |
-| `app_reviews.json` | `AppReview` | Ratings and comments |
+| `store_apps` | `StoreApp` | App records with inline tools, prompts, UI components |
+| `app_installs` | `AppInstall` | Per-user installations with settings |
+| `app_shares` | `AppShare` | Share invites (by user or link) |
+| `app_reviews` | `AppReview` | Ratings and comments |
 
 ---
 
@@ -110,10 +115,10 @@ Rules: one review per user per app, author cannot review own app, `avgRating` an
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/my/apps` | List apps I authored |
-| `POST` | `/api/my/apps` | Create app (writes disk files + JSON record, auto-installs for author) |
+| `POST` | `/api/my/apps` | Create app (DB record, auto-installs for author) |
 | `GET` | `/api/my/apps/:id` | Get my app (full detail) |
-| `PUT` | `/api/my/apps/:id` | Update metadata (partial update, re-writes app.yaml) |
-| `DELETE` | `/api/my/apps/:id` | Delete app (removes disk dir + JSON record + reviews) |
+| `PUT` | `/api/my/apps/:id` | Update metadata (partial update) |
+| `DELETE` | `/api/my/apps/:id` | Delete app (DB record + reviews) |
 | `POST` | `/api/my/apps/:id/publish` | Validate and set visibility to public |
 | `PATCH` | `/api/my/apps/:id/visibility` | Set visibility (`{visibility}`) |
 
@@ -130,15 +135,15 @@ Rules: one review per user per app, author cannot review own app, `avgRating` an
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/my/apps/:id/tools` | Add tool (writes `.js` + `.json` to disk, reloads registry) |
-| `PUT` | `/api/my/apps/:id/tools/:name` | Update tool (re-writes files, reloads) |
-| `DELETE` | `/api/my/apps/:id/tools/:name` | Delete tool (removes files, reloads) |
+| `POST` | `/api/my/apps/:id/tools` | Add tool (DB update, reloads registry) |
+| `PUT` | `/api/my/apps/:id/tools/:name` | Update tool (DB update, reloads) |
+| `DELETE` | `/api/my/apps/:id/tools/:name` | Delete tool (DB update, reloads) |
 
 ### Prompts within an app
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/my/apps/:id/prompts` | Add prompt (writes `.md` to disk, reloads registry) |
+| `POST` | `/api/my/apps/:id/prompts` | Add prompt (DB update, reloads registry) |
 | `PUT` | `/api/my/apps/:id/prompts/:name` | Update prompt |
 | `DELETE` | `/api/my/apps/:id/prompts/:name` | Delete prompt |
 
@@ -148,10 +153,11 @@ Rules: one review per user per app, author cannot review own app, `avgRating` an
 
 When a tool is added via the API, the server:
 
-1. Updates the `StoreApp` record in `store_apps.json` (keeps inline copy for metadata display).
-2. Writes `tools/{name}.json` (manifest) + `tools/{name}.js` (script) to `data/apps/{appName}/`.
-3. Reloads the app registry so the tool is immediately available.
-4. Rebuilds the MCP factory cache.
+1. Updates the `StoreApp` record in the database (tools stored as JSON column with inline script).
+2. Reloads the app registry so the tool is immediately available.
+3. Rebuilds the MCP factory cache.
+
+No disk files are written. The JS script lives in `StoreTool.Script` in the database.
 
 Tools execute via the Goja JS sandbox with these host APIs:
 - `http.get/post/put/patch/delete(url, body?, opts?)` -- outbound HTTP (restricted by `allowedHosts`)
@@ -214,8 +220,9 @@ iot-devices, analytics, devops, marketing, design, utilities, integrations, auto
 | `visibility` | string | `private`, `shared`, `unlisted`, `public` |
 | `permissions` | object | `{allowedHosts, defaultToolClass, secrets}` |
 | `settings` | []SettingDef | `{key, label, type, required, default}` |
-| `tools` | []StoreTool | Tool metadata (inline copy for display; execution uses disk files) |
-| `prompts` | []StorePrompt | Prompt metadata (inline copy; execution uses disk files) |
+| `tools` | []StoreTool | Tools with inline JS scripts (single source of truth) |
+| `prompts` | []StorePrompt | Prompt templates (single source of truth) |
+| `uiComponents` | []UIComponent | React UI components for live preview |
 | `installCount` | int | Total installs |
 | `activeInstalls` | int | Currently enabled |
 | `avgRating` | float | 0.0--5.0 |
@@ -233,7 +240,7 @@ iot-devices, analytics, devops, marketing, design, utilities, integrations, auto
 | `toolClass` | string | `read-only`, `read-write`, `destructive` |
 | `mode` | string | `""` (standard) or `"qa"` (interactive wizard) |
 | `params` | map | `{paramName: {type, required, description}}` |
-| `script` | string | JavaScript source (must define `handle(params)`). Also written to disk. |
+| `script` | string | JavaScript source (must define `handle(params)`) |
 
 ### StorePrompt
 
@@ -243,6 +250,13 @@ iot-devices, analytics, devops, marketing, design, utilities, integrations, auto
 | `description` | string | |
 | `arguments` | []object | `{name, description, required}` |
 | `body` | string | Markdown with `{{key}}` substitution |
+
+### UIComponent
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Component name (e.g. `dashboard`, `search-bar`) |
+| `code` | string | Raw TSX source (no imports, uses SCOPE) |
 
 ### AppReview
 
@@ -271,9 +285,9 @@ iot-devices, analytics, devops, marketing, design, utilities, integrations, auto
 
 ---
 
-## Disk app structure
+## System app disk structure
 
-Every app (system or user-created) has the same structure:
+System apps (shipped with the code) live on disk at `data/apps/`. User-created apps do NOT use disk — they are DB-only.
 
 ```
 data/apps/{app-name}/

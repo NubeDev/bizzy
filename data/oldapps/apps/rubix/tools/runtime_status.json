@@ -1,0 +1,6 @@
+{
+  "name": "runtime_status",
+  "description": "Get Rubix runtime status — node count, edge count, uptime, and whether the system is running.",
+  "toolClass": "read-only",
+  "params": {}
+}

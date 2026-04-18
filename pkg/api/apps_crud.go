@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/NubeDev/bizzy/pkg/toolname"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
@@ -200,6 +201,11 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	if err := toolname.Validate(req.Name, req.Mode); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	toolsDir := filepath.Join(app.Dir, "tools")
 	os.MkdirAll(toolsDir, 0755)
 
@@ -272,6 +278,10 @@ func (a *API) updateTool(c *gin.Context) {
 		Script      string         `json:"script"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := toolname.Validate(toolName, req.Mode); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

@@ -1,0 +1,52 @@
+{
+  "name": "create_node",
+  "description": "Create a Rubix node. Auto-resolves parentRef — pass a parent node name to search for it, or omit for root (device level).",
+  "toolClass": "read-write",
+  "params": {
+    "type": {
+      "type": "string",
+      "required": true,
+      "description": "Node type from pallet (e.g. 'core.trigger', 'core.counter', 'ui.container', 'core.folder')"
+    },
+    "name": {
+      "type": "string",
+      "required": true,
+      "description": "Display name for the node"
+    },
+    "parentName": {
+      "type": "string",
+      "required": false,
+      "description": "Name of parent node to search for. Omit to place at device root."
+    },
+    "parentId": {
+      "type": "string",
+      "required": false,
+      "description": "Exact parent node ID. Takes priority over parentName if both provided."
+    },
+    "settings": {
+      "type": "string",
+      "required": false,
+      "description": "JSON string of node settings (e.g. '{\"initialValue\": 0}')"
+    },
+    "tags": {
+      "type": "string",
+      "required": false,
+      "description": "Comma-separated identity tags to add (e.g. 'site,building' or 'sensor,temp,point')"
+    },
+    "siteRef": {
+      "type": "string",
+      "required": false,
+      "description": "Site ref node ID (for building/floor containers)"
+    },
+    "x": {
+      "type": "number",
+      "required": false,
+      "description": "X position (default 100)"
+    },
+    "y": {
+      "type": "number",
+      "required": false,
+      "description": "Y position (default 100)"
+    }
+  }
+}

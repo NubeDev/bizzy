@@ -25,8 +25,8 @@ import (
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/api"
 	"github.com/NubeDev/bizzy/pkg/apps"
-	"github.com/NubeDev/bizzy/pkg/jsondb"
-	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/database"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,23 +60,38 @@ func setupEnv(t *testing.T) *testEnv {
 	dataDir := t.TempDir()
 	appsDir, _ := filepath.Abs("../apps")
 
-	workspaces, _ := jsondb.NewCollection[models.Workspace](filepath.Join(dataDir, "workspaces.json"))
-	users, _ := jsondb.NewCollection[models.User](filepath.Join(dataDir, "users.json"))
-	appInstalls, _ := jsondb.NewCollection[models.AppInstall](filepath.Join(dataDir, "app_installs.json"))
+	db, err := database.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
 
-	registry, err := apps.NewRegistry(appsDir)
+	registry, err := apps.NewRegistry(db, appsDir)
 	if err != nil {
 		t.Fatalf("load apps: %v", err)
 	}
 	mcpFactory := apps.NewMCPFactory(registry)
 
+	runners := airunner.NewRegistry()
+	agentSvc := &services.AgentService{
+		DB:          db,
+		MCPFactory:  mcpFactory,
+		Runners:     runners,
+		Jobs:        airunner.NewJobStore(),
+		AppRegistry: registry,
+	}
+	toolSvc := &services.ToolService{
+		DB:          db,
+		AppRegistry: registry,
+	}
+
 	a := &api.API{
-		Workspaces:  workspaces,
-		Users:       users,
-		AppInstalls: appInstalls,
+		DB:          db,
 		AppRegistry: registry,
 		MCPFactory:  mcpFactory,
-		Runners:     airunner.NewRegistry(),
+		Runners:     runners,
+		Jobs:        agentSvc.Jobs,
+		AgentSvc:    agentSvc,
+		ToolSvc:     toolSvc,
 	}
 
 	router := a.SetupRouter()

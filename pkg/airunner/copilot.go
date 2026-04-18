@@ -2,6 +2,7 @@ package airunner
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -33,7 +34,7 @@ func (r *CopilotRunner) Available() bool {
 	return strings.Contains(string(out), "copilot")
 }
 
-func (r *CopilotRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
+func (r *CopilotRunner) Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 	var result RunResult
 
 	ghPath, err := exec.LookPath("gh")
@@ -46,7 +47,7 @@ func (r *CopilotRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)
 	// gh copilot suggest -t shell "prompt"
 	args := []string{"copilot", "suggest", "-t", "shell", cfg.Prompt}
 
-	cmd := exec.Command(ghPath, args...)
+	cmd := exec.CommandContext(ctx, ghPath, args...)
 	if cfg.WorkDir != "" {
 		cmd.Dir = cfg.WorkDir
 	}
@@ -98,6 +99,8 @@ func (r *CopilotRunner) Run(cfg RunConfig, sessionID string, onEvent func(Event)
 
 	elapsed := time.Since(start)
 	result.Text = textBuf.String()
+	result.Provider = string(ProviderCopilot)
+	result.Model = "copilot"
 	result.DurationMS = int(elapsed.Milliseconds())
 
 	onEvent(Event{

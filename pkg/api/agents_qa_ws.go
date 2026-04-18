@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"time"
 
+	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/claude"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -73,25 +73,18 @@ func (a *API) runQAWS(c *gin.Context) {
 	token := c.Query("token")
 
 	var user models.User
-	var ok bool
 
 	if token == "" || token == "dev" {
 		// Dev mode: use the first user (same as REST auth middleware).
-		all := a.Users.All()
-		if len(all) == 0 {
+		if err := a.DB.First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users exist"})
 			return
 		}
-		user = all[0]
-		ok = true
 	} else {
-		user, ok = a.Users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-	}
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-		return
+		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
 	}
 
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
@@ -116,11 +109,13 @@ func (a *API) runQAWS(c *gin.Context) {
 	}
 
 	// Resolve the JS tool.
-	runtime, manifest, err := a.resolveJSTool(user, req.Flow)
+	resolved, err := a.ToolSvc.ResolveTool(user.ID, req.Flow)
 	if err != nil {
 		sendQAError(conn, sessionID, err.Error())
 		return
 	}
+	runtime := resolved.Runtime
+	manifest := resolved.Manifest
 
 	// Q&A loop: call JS tool → get question or prompt → repeat.
 	answers := make(map[string]any)
@@ -182,8 +177,8 @@ func (a *API) runQAWS(c *gin.Context) {
 			}
 			conn.WriteJSON(genEvent)
 
-			mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
-			claudeResult := claude.Run(claude.RunConfig{
+			mcpURL := a.AgentSvc.MCPURL()
+			claudeResult := claude.Run(c.Request.Context(), claude.RunConfig{
 				Prompt:       prompt,
 				MCPURL:       mcpURL,
 				MCPToken:     user.Token,
@@ -205,16 +200,19 @@ func (a *API) runQAWS(c *gin.Context) {
 			// Build the full prompt with answers for the session record.
 			answersJSON, _ := json.Marshal(answers)
 
-			a.Sessions.Create(models.Session{
-				ID:         sessionID,
-				Agent:      manifest.AppName,
-				Prompt:     string(answersJSON),
-				Result:     claudeResult.Text,
-				Status:     "done",
-				DurationMS: claudeResult.DurationMS,
-				CostUSD:    claudeResult.CostUSD,
-				UserID:     user.ID,
-				CreatedAt:  time.Now().UTC(),
+			a.AgentSvc.SaveSession(services.SessionParams{
+				ID:        sessionID,
+				Agent:     manifest.AppName,
+				Prompt:    string(answersJSON),
+				UserID:    user.ID,
+				JobStatus: "done",
+				Result: &airunner.RunResult{
+					Text:            claudeResult.Text,
+					Provider:        "claude",
+					ClaudeSessionID: claudeResult.ClaudeSessionID,
+					DurationMS:      claudeResult.DurationMS,
+					CostUSD:         claudeResult.CostUSD,
+				},
 			})
 
 			conn.WriteMessage(

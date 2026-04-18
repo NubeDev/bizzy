@@ -6,6 +6,7 @@ export interface ToolParam {
   type: string
   required: boolean
   description: string
+  options?: string[] | { value: string; label: string }[]
 }
 
 export interface StoreTool {
@@ -21,6 +22,11 @@ export interface PromptArgument {
   name: string
   description: string
   required: boolean
+}
+
+export interface UIComponent {
+  name: string
+  code: string
 }
 
 export interface StorePrompt {
@@ -63,6 +69,7 @@ export interface StoreApp {
   settings: SettingDef[]
   tools: StoreTool[]
   prompts: StorePrompt[]
+  uiComponents?: UIComponent[]
   installCount: number
   activeInstalls: number
   avgRating: number
@@ -124,5 +131,18 @@ export interface CreateAppRequest {
   category?: string
   icon?: string
   color?: string
+}
+
+export interface PluginSummary {
+  name: string
+  version: string
+  description?: string
+  services: string[]
+  status: string
+  registered_at: string
+  last_heartbeat?: string
+  health_failures: number
+  tool_count: number
+  prompt_count: number
 }
 

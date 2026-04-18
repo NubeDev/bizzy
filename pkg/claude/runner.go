@@ -4,6 +4,7 @@ package claude
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,11 +15,12 @@ import (
 
 // RunConfig configures a Claude Code invocation.
 type RunConfig struct {
-	Prompt       string
-	ResumeID     string // If set, resumes an existing Claude session instead of starting fresh
-	MCPURL       string // e.g. http://localhost:8090/mcp
-	MCPToken     string // Bearer token for MCP auth
-	AllowedTools string // Tool pattern, e.g. "mcp__nube__*"
+	Prompt         string
+	ResumeID       string // If set, resumes an existing Claude session instead of starting fresh
+	MCPURL         string // e.g. http://localhost:8090/mcp
+	MCPToken       string // Bearer token for MCP auth
+	AllowedTools   string // Tool pattern, e.g. "mcp__nube__*"
+	ThinkingBudget string // "low", "medium", "high", or token count (e.g. "5000")
 }
 
 // Event is a parsed event from Claude's stream-json output.
@@ -42,9 +44,9 @@ type RunResult struct {
 }
 
 // Run spawns claude and sends parsed events to the callback.
-// It blocks until the process exits. The callback is called
-// sequentially from one goroutine.
-func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
+// It blocks until the process exits or the context is cancelled.
+// The callback is called sequentially from one goroutine.
+func Run(ctx context.Context, cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 	var result RunResult
 
 	claudePath, err := exec.LookPath("claude")
@@ -68,12 +70,17 @@ func Run(cfg RunConfig, sessionID string, onEvent func(Event)) RunResult {
 		"--mcp-config", mcpFile,
 	}
 
+	// Set thinking budget if specified.
+	if cfg.ThinkingBudget != "" {
+		args = append(args, "--thinking-budget", cfg.ThinkingBudget)
+	}
+
 	// Resume an existing session for multi-turn conversations.
 	if cfg.ResumeID != "" {
 		args = append(args, "--resume", cfg.ResumeID)
 	}
 
-	cmd := exec.Command(claudePath, args...)
+	cmd := exec.CommandContext(ctx, claudePath, args...)
 	cmd.Stdin = strings.NewReader(cfg.Prompt)
 	cmd.Stderr = nil
 

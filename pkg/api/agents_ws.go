@@ -3,13 +3,12 @@ package api
 import (
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/auth"
-	"github.com/NubeDev/bizzy/pkg/claude"
 	"github.com/NubeDev/bizzy/pkg/models"
+	"github.com/NubeDev/bizzy/pkg/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -22,11 +21,12 @@ var wsUpgrader = websocket.Upgrader{
 
 // wsRequest is the first message the client sends after connecting.
 type wsRequest struct {
-	Prompt    string `json:"prompt"`
-	SessionID string `json:"session_id,omitempty"` // If set, resumes this Claude session (multi-turn)
-	Agent     string `json:"agent"`
-	Provider  string `json:"provider,omitempty"` // "claude" (default), "codex", "copilot"
-	Model     string `json:"model,omitempty"`    // model override for the chosen provider
+	Prompt         string `json:"prompt"`
+	SessionID      string `json:"session_id,omitempty"`      // If set, resumes this Claude session (multi-turn)
+	Agent          string `json:"agent"`
+	Provider       string `json:"provider,omitempty"`        // "claude" (default), "codex", "copilot"
+	Model          string `json:"model,omitempty"`           // model override for the chosen provider
+	ThinkingBudget string `json:"thinking_budget,omitempty"` // "low", "medium", "high", or token count
 }
 
 // runAgentWS upgrades to WebSocket and runs a Claude session.
@@ -45,23 +45,17 @@ func (a *API) runAgentWS(c *gin.Context) {
 	var user models.User
 	token := c.Query("token")
 	if token != "" {
-		u, ok := a.Users.FindOne(func(u models.User) bool {
-			return u.Token == token
-		})
-		if !ok {
+		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
 			log.Printf("[agents-ws] invalid token")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
-		user = u
 	} else {
-		all := a.Users.All()
-		if len(all) == 0 {
+		if err := a.DB.First(&user).Error; err != nil {
 			log.Printf("[agents-ws] no users exist")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users — POST /bootstrap first"})
 			return
 		}
-		user = all[0]
 		log.Printf("[agents-ws] dev mode: using user %s (%s)", user.ID, user.Name)
 	}
 
@@ -75,7 +69,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 
 	// Create session and send ID to client immediately.
 	sessionID := models.GenerateID("ses-")
-	if err := conn.WriteJSON(claude.Event{Type: "session", SessionID: sessionID}); err != nil {
+	if err := conn.WriteJSON(airunner.Event{Type: "session", SessionID: sessionID}); err != nil {
 		log.Printf("[agents-ws] failed to send session event: %v", err)
 		return
 	}
@@ -107,12 +101,13 @@ func (a *API) runAgentWS(c *gin.Context) {
 		}
 	}
 
-	mcpURL := "http://localhost" + os.Getenv("NUBE_ADDR") + "/mcp"
+	mcpURL := a.AgentSvc.MCPURL()
 
-	provider := airunner.Provider(req.Provider)
-	if provider == "" {
-		provider = airunner.ProviderClaude
-	}
+	// Build system context (memory + app descriptions) and enriched prompt.
+	systemPrompt := a.AgentSvc.BuildSystemPrompt(user.ID)
+	prompt := a.AgentSvc.EnrichPrompt(user.ID, req.Prompt)
+
+	provider, model := a.AgentSvc.ResolveProvider(req.Provider, req.Model, user)
 	log.Printf("[agents-ws] using provider: %s", provider)
 
 	runner, runnerErr := a.Runners.Get(provider)
@@ -123,83 +118,94 @@ func (a *API) runAgentWS(c *gin.Context) {
 	}
 	if !runner.Available() {
 		log.Printf("[agents-ws] provider %s not available", provider)
-		sendWSError(conn, sessionID, string(provider)+" CLI is not installed or not in PATH")
+		sendWSError(conn, sessionID, string(provider)+" is not available")
 		return
 	}
 	log.Printf("[agents-ws] provider %s available, starting run...", provider)
 
-	var result claude.RunResult
-	eventCount := 0
-
-	if provider == airunner.ProviderClaude {
-		resumeID := req.SessionID // empty on first message, set on subsequent messages
-		if resumeID != "" {
-			log.Printf("[agents-ws] RESUMING claude session %s", resumeID)
-		} else {
-			log.Printf("[agents-ws] starting NEW claude session with MCP=%s", mcpURL)
-		}
-		result = claude.Run(claude.RunConfig{
-			Prompt:       req.Prompt,
-			ResumeID:     resumeID,
-			MCPURL:       mcpURL,
-			MCPToken:     user.Token,
-			AllowedTools: "mcp__nube__*",
-		}, sessionID, func(ev claude.Event) {
-			eventCount++
-			switch ev.Type {
-			case "text":
-				// skip logging streaming text chunks
-			case "tool_call":
-				log.Printf("[agents-ws] event #%d: tool_call name=%s", eventCount, ev.Name)
-			default:
-				log.Printf("[agents-ws] event #%d: type=%s", eventCount, ev.Type)
-			}
-			if err := conn.WriteJSON(ev); err != nil {
-				log.Printf("[agents-ws] ws write error: %v", err)
-			}
-		})
-		// Send the Claude session ID back so the frontend can resume next time.
-		if result.ClaudeSessionID != "" {
-			log.Printf("[agents-ws] claude session ID: %s", result.ClaudeSessionID)
-			conn.WriteJSON(claude.Event{
-				Type:      "session_id",
-				SessionID: sessionID,
-				Content:   result.ClaudeSessionID,
-			})
-		}
-		log.Printf("[agents-ws] claude finished: %d events, %dms, $%.4f", eventCount, result.DurationMS, result.CostUSD)
+	if req.SessionID != "" {
+		log.Printf("[agents-ws] RESUMING session %s", req.SessionID)
 	} else {
-		// Use the airunner abstraction for codex / copilot.
-		aiResult := runner.Run(airunner.RunConfig{
-			Prompt:       req.Prompt,
-			MCPURL:       mcpURL,
-			MCPToken:     user.Token,
-			AllowedTools: "mcp__nube__*",
-			Model:        req.Model,
-		}, sessionID, func(ev airunner.Event) {
-			if err := conn.WriteJSON(ev); err != nil {
-				log.Printf("[agents] ws write: %v", err)
-			}
-		})
-		result = claude.RunResult{
-			Text:       aiResult.Text,
-			DurationMS: aiResult.DurationMS,
-			CostUSD:    aiResult.CostUSD,
+		log.Printf("[agents-ws] starting NEW session with MCP=%s", mcpURL)
+	}
+
+	// Submit as a job — all runs go through the job store so they're cancellable.
+	jobID := models.GenerateID("job-")
+	job := a.Jobs.Submit(
+		jobID,
+		string(provider),
+		model,
+		runner,
+		airunner.RunConfig{
+			Prompt:         prompt,
+			SystemPrompt:   systemPrompt,
+			ResumeID:       req.SessionID,
+			MCPURL:         mcpURL,
+			MCPToken:       user.Token,
+			AllowedTools:   "mcp__nube__*",
+			Model:          model,
+			ThinkingBudget: req.ThinkingBudget,
+		},
+		sessionID,
+		user.ID,
+	)
+
+	// Send job_id to client so they can cancel from elsewhere.
+	conn.WriteJSON(airunner.Event{
+		Type:      "job",
+		SessionID: sessionID,
+		Content:   jobID,
+	})
+
+	// Subscribe to real-time events and stream to WS.
+	events := job.Subscribe()
+	defer job.Unsubscribe(events)
+
+	eventCount := 0
+	for ev := range events {
+		eventCount++
+		switch ev.Type {
+		case "text":
+			// skip logging streaming text chunks
+		case "tool_call":
+			log.Printf("[agents-ws] event #%d: tool_call name=%s", eventCount, ev.Name)
+		default:
+			log.Printf("[agents-ws] event #%d: type=%s", eventCount, ev.Type)
+		}
+		if err := conn.WriteJSON(ev); err != nil {
+			log.Printf("[agents-ws] ws write error: %v", err)
+			// WS broken — cancel the job.
+			a.Jobs.Cancel(jobID)
+			break
 		}
 	}
 
-	// Persist session to disk.
-	a.Sessions.Create(models.Session{
-		ID:              sessionID,
-		ClaudeSessionID: result.ClaudeSessionID,
-		Agent:           req.Agent,
-		Prompt:          req.Prompt,
-		Result:          result.Text,
-		Status:          "done",
-		DurationMS:      result.DurationMS,
-		CostUSD:         result.CostUSD,
-		UserID:     user.ID,
-		CreatedAt:  time.Now().UTC(),
+	// Wait for the result (job may still be finishing).
+	for job.Result() == nil {
+		time.Sleep(50 * time.Millisecond)
+	}
+	result := job.Result()
+
+	// If the provider returned a session ID for resume (Claude), send it to the client.
+	if result.ClaudeSessionID != "" {
+		log.Printf("[agents-ws] claude session ID: %s", result.ClaudeSessionID)
+		conn.WriteJSON(airunner.Event{
+			Type:      "session_id",
+			Provider:  string(provider),
+			SessionID: sessionID,
+			Content:   result.ClaudeSessionID,
+		})
+	}
+	log.Printf("[agents-ws] %s finished: %d events, %dms, $%.4f", provider, eventCount, result.DurationMS, result.CostUSD)
+
+	// Persist session.
+	a.AgentSvc.SaveSession(services.SessionParams{
+		ID:        sessionID,
+		Agent:     req.Agent,
+		Prompt:    req.Prompt,
+		UserID:    user.ID,
+		JobStatus: string(job.Status),
+		Result:    result,
 	})
 
 	conn.WriteMessage(
@@ -209,7 +215,7 @@ func (a *API) runAgentWS(c *gin.Context) {
 }
 
 func sendWSError(conn *websocket.Conn, sessionID, msg string) {
-	conn.WriteJSON(claude.Event{Type: "error", SessionID: sessionID, Error: msg})
+	conn.WriteJSON(airunner.Event{Type: "error", SessionID: sessionID, Error: msg})
 }
 
 // --- Session history REST endpoints ---
@@ -217,12 +223,17 @@ func sendWSError(conn *websocket.Conn, sessionID, msg string) {
 // sessionSummary is the list view (omits full result text).
 type sessionSummary struct {
 	ID              string    `json:"id"`
+	Provider        string    `json:"provider"`
+	Model           string    `json:"model,omitempty"`
 	ClaudeSessionID string    `json:"claude_session_id,omitempty"`
 	Agent           string    `json:"agent,omitempty"`
 	Prompt          string    `json:"prompt"`
 	Status          string    `json:"status"`
 	DurationMS      int       `json:"duration_ms"`
 	CostUSD         float64   `json:"cost_usd"`
+	InputTokens     int       `json:"input_tokens,omitempty"`
+	OutputTokens    int       `json:"output_tokens,omitempty"`
+	ToolCalls       int       `json:"tool_calls,omitempty"`
 	UserID          string    `json:"user_id"`
 	CreatedAt       time.Time `json:"created_at"`
 }
@@ -230,21 +241,23 @@ type sessionSummary struct {
 // listSessions returns session history for the authenticated user.
 func (a *API) listSessions(c *gin.Context) {
 	user := auth.GetUser(c)
-
-	all := a.Sessions.FindFunc(func(s models.Session) bool {
-		return s.UserID == user.ID
-	})
+	all := a.AgentSvc.ListSessions(user.ID)
 
 	out := make([]sessionSummary, 0, len(all))
 	for _, s := range all {
 		out = append(out, sessionSummary{
 			ID:              s.ID,
+			Provider:        s.Provider,
+			Model:           s.Model,
 			ClaudeSessionID: s.ClaudeSessionID,
 			Agent:           s.Agent,
 			Prompt:          s.Prompt,
 			Status:          s.Status,
 			DurationMS:      s.DurationMS,
 			CostUSD:         s.CostUSD,
+			InputTokens:     s.InputTokens,
+			OutputTokens:    s.OutputTokens,
+			ToolCalls:       s.ToolCalls,
 			UserID:          s.UserID,
 			CreatedAt:       s.CreatedAt,
 		})
@@ -258,8 +271,8 @@ func (a *API) getSession(c *gin.Context) {
 	user := auth.GetUser(c)
 	id := c.Param("id")
 
-	s, ok := a.Sessions.Get(id)
-	if !ok || s.UserID != user.ID {
+	s, err := a.AgentSvc.GetSession(id, user.ID)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
