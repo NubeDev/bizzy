@@ -89,12 +89,7 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
       {(d.inputPorts?.length || 0) > 0 && (
         <div className="px-2.5 pb-1 space-y-0.5">
           {d.inputPorts?.map((port) => (
-            <PortLabel
-              key={port.handle}
-              port={port}
-              side="input"
-              value={d.inputValue}
-            />
+            <PortLabel key={port.handle} port={port} side="input" value={d.inputValue} />
           ))}
         </div>
       )}
@@ -102,12 +97,7 @@ export const BaseNode = memo(function BaseNode({ data, selected }: NodeProps) {
       {(d.outputPorts?.length || 0) > 0 && (
         <div className="px-2.5 pb-1 space-y-0.5">
           {d.outputPorts?.map((port) => (
-            <PortLabel
-              key={port.handle}
-              port={port}
-              side="output"
-              value={d.outputValue}
-            />
+            <PortLabel key={port.handle} port={port} side="output" value={d.outputValue} />
           ))}
         </div>
       )}
@@ -139,7 +129,7 @@ function PortLabel({ port, side, value }: { port: FlowPortDef; side: 'input' | '
   const isInput = side === 'input'
 
   return (
-    <div className={cn('group relative text-[10px] text-muted-foreground flex items-center gap-1', !isInput && 'justify-end')}>
+    <div className={cn('group/port relative text-[10px] text-muted-foreground flex items-center gap-1', !isInput && 'justify-end')}>
       {isInput && (
         <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', hasValue ? 'bg-green-500' : 'bg-muted-foreground/30')} />
       )}
@@ -152,26 +142,93 @@ function PortLabel({ port, side, value }: { port: FlowPortDef; side: 'input' | '
       {/* Hover tooltip */}
       {hasValue && (
         <div className={cn(
-          'absolute z-50 hidden group-hover:block',
-          'bg-popover border border-border rounded shadow-lg p-2',
-          'min-w-[180px] max-w-[320px]',
+          'absolute z-50 hidden group-hover/port:block',
+          'bg-popover border border-border rounded-md shadow-xl',
+          'min-w-[200px] max-w-[360px]',
           isInput ? 'left-0 top-full mt-1' : 'right-0 top-full mt-1',
         )}>
-          <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
-            {side}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+            <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">{side}</span>
           </div>
-          <pre className="text-[10px] font-mono text-foreground whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
-            {formatValue(value)}
-          </pre>
+          <div className="p-2 max-h-[240px] overflow-y-auto">
+            <JsonPretty value={value} />
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function formatValue(value: unknown): string {
-  if (value == null) return 'null'
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  return JSON.stringify(value, null, 2)
+function JsonPretty({ value }: { value: unknown }) {
+  return (
+    <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all">
+      {renderValue(value, 0)}
+    </pre>
+  )
+}
+
+function renderValue(value: unknown, depth: number): JSX.Element | string {
+  if (value === null) return <span className="text-orange-400">null</span>
+  if (value === undefined) return <span className="text-orange-400">undefined</span>
+
+  if (typeof value === 'boolean') {
+    return <span className="text-purple-400">{String(value)}</span>
+  }
+
+  if (typeof value === 'number') {
+    return <span className="text-cyan-400">{value}</span>
+  }
+
+  if (typeof value === 'string') {
+    if (depth === 0) return <span className="text-green-400">{value}</span>
+    return <span className="text-green-400">&quot;{value}&quot;</span>
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-muted-foreground">{'[]'}</span>
+    const indent = '  '.repeat(depth)
+    const innerIndent = '  '.repeat(depth + 1)
+    return (
+      <>
+        <span className="text-muted-foreground">{'['}</span>
+        {'\n'}
+        {value.map((item, i) => (
+          <span key={i}>
+            {innerIndent}
+            {renderValue(item, depth + 1)}
+            {i < value.length - 1 && <span className="text-muted-foreground">,</span>}
+            {'\n'}
+          </span>
+        ))}
+        {indent}<span className="text-muted-foreground">{']'}</span>
+      </>
+    )
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) return <span className="text-muted-foreground">{'{}'}</span>
+    const indent = '  '.repeat(depth)
+    const innerIndent = '  '.repeat(depth + 1)
+    return (
+      <>
+        <span className="text-muted-foreground">{'{'}</span>
+        {'\n'}
+        {entries.map(([key, val], i) => (
+          <span key={key}>
+            {innerIndent}
+            <span className="text-blue-400">&quot;{key}&quot;</span>
+            <span className="text-muted-foreground">: </span>
+            {renderValue(val, depth + 1)}
+            {i < entries.length - 1 && <span className="text-muted-foreground">,</span>}
+            {'\n'}
+          </span>
+        ))}
+        {indent}<span className="text-muted-foreground">{'}'}</span>
+      </>
+    )
+  }
+
+  return String(value)
 }

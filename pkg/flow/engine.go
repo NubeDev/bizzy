@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
+	"github.com/NubeDev/bizzy/pkg/flow/settings"
 	"github.com/NubeDev/bizzy/pkg/services"
 )
 
@@ -29,6 +30,7 @@ type Engine struct {
 	// Active run tracking.
 	mu      sync.RWMutex
 	cancels map[string]context.CancelFunc // runID -> cancel
+	runs    map[string]*FlowRun          // runID -> live run (in-memory only)
 
 	// Webhook trigger dispatch table.
 	webhookMu sync.RWMutex
@@ -53,6 +55,7 @@ func NewEngine(store *Store, registry *NodeTypeRegistry) *Engine {
 		MaxParallelNodes: 50,
 		MaxRunsPerUser:   10,
 		cancels:          make(map[string]context.CancelFunc),
+		runs:             make(map[string]*FlowRun),
 		webhooks:         make(map[string]func(inputs map[string]any)),
 	}
 	RegisterBuiltinTriggers(e)
@@ -130,24 +133,15 @@ func (e *Engine) SetJSFactory(factory JSRuntimeFactory) {
 }
 
 // RegisterAppTools scans an app registry and registers each app tool as a
-// draggable flow node type (tool:appName.toolName). Input ports are generated
-// from the tool's parameter definitions. The executor for tool:* prefix is
-// already registered — this only adds the node type metadata for the palette.
+// draggable flow node type (tool:appName.toolName). Each tool node follows the
+// single-input payload model: one "input" port accepts a JSON object whose keys
+// map to tool parameters, and node settings (configured in the panel) act as
+// defaults that the input payload can override.
 func (e *Engine) RegisterAppTools(appRegistry AppToolSource) int {
 	registered := 0
 	for _, appInfo := range appRegistry.ListApps() {
 		for _, tool := range appRegistry.AppTools(appInfo.Name) {
 			nodeType := "tool:" + appInfo.Name + "." + tool.Name
-
-			var inputs []PortDef
-			for pName, pDef := range tool.Params {
-				inputs = append(inputs, PortDef{
-					Handle:   pName,
-					Label:    pName,
-					Type:     toolParamTypeToPort(pDef.Type),
-					Required: pDef.Required,
-				})
-			}
 
 			e.registry.Register(NodeTypeDef{
 				Type:        nodeType,
@@ -156,17 +150,66 @@ func (e *Engine) RegisterAppTools(appRegistry AppToolSource) int {
 				Category:    "tool",
 				Source:      "app:" + appInfo.Name,
 				Ports: PortsDef{
-					Inputs: inputs,
+					Inputs: []PortDef{
+						{Handle: "input", Label: "Input", Type: "any"},
+					},
 					Outputs: []PortDef{
 						{Handle: "result", Label: "Result", Type: "any"},
 						{Handle: "error", Label: "Error", Type: "string"},
 					},
 				},
+				Settings: buildToolSchema(tool),
 			})
 			registered++
 		}
 	}
 	return registered
+}
+
+// buildToolSchema generates a JSON Schema from a tool's parameter definitions.
+// The schema drives the node config panel — each param becomes a form field.
+func buildToolSchema(tool AppToolManifest) *settings.JSONSchema {
+	b := settings.Object().Title(tool.Name + " Settings")
+	var required []string
+	for pName, pDef := range tool.Params {
+		prop := toolParamSchema(pDef)
+		prop.Title = pName
+		if pDef.Description != "" {
+			prop.Description = pDef.Description
+		}
+		b.Property(pName, prop)
+		if pDef.Required {
+			required = append(required, pName)
+		}
+	}
+	if len(required) > 0 {
+		b.Required(required...)
+	}
+	b.Property("on_error", settings.String().
+		Title("On Error").
+		Desc("What to do when this node fails.").
+		Default("stop").
+		Enum("stop", "skip", "retry", "fallback").
+		Build())
+	b.Property("timeout", settings.Integer().
+		Title("Timeout (seconds)").
+		Desc("Max execution time. 0 = no limit.").
+		Default(0).
+		Min(0).
+		Build())
+	return b.Build()
+}
+
+// toolParamSchema creates a JSONSchema property for a single tool parameter.
+func toolParamSchema(p AppToolParam) *settings.JSONSchema {
+	switch p.Type {
+	case "number":
+		return settings.Number().Build()
+	case "boolean":
+		return settings.Bool().Build()
+	default:
+		return settings.String().Build()
+	}
 }
 
 // AppToolInfo describes an app for tool registration.
@@ -183,26 +226,15 @@ type AppToolManifest struct {
 
 // AppToolParam describes a tool parameter.
 type AppToolParam struct {
-	Type     string
-	Required bool
+	Type        string
+	Required    bool
+	Description string
 }
 
 // AppToolSource provides app and tool listings for dynamic registration.
 type AppToolSource interface {
 	ListApps() []AppToolInfo
 	AppTools(appName string) []AppToolManifest
-}
-
-// toolParamTypeToPort maps tool param types to port types.
-func toolParamTypeToPort(t string) string {
-	switch t {
-	case "number":
-		return "number"
-	case "boolean":
-		return "bool"
-	default:
-		return "string"
-	}
 }
 
 // Executors returns the executor registry for registering custom node types.
@@ -258,6 +290,7 @@ func (e *Engine) StartRun(ctx context.Context, flowID, userID string, inputs map
 		Variables:   make(map[string]any),
 		UserID:      userID,
 		ReplyTo:     replyTo,
+		resumeCh:    make(chan approvalResult, 1),
 	}
 
 	if err := e.store.CreateRun(run); err != nil {
@@ -278,13 +311,15 @@ func (e *Engine) execute(ctx context.Context, run *FlowRun, def *FlowDef) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Register cancel for external cancellation.
+	// Register cancel and run for external access (approval, cancellation).
 	e.mu.Lock()
 	e.cancels[run.ID] = cancel
+	e.runs[run.ID] = run
 	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
 		delete(e.cancels, run.ID)
+		delete(e.runs, run.ID)
 		e.mu.Unlock()
 	}()
 
@@ -368,9 +403,21 @@ func (e *Engine) execute(ctx context.Context, run *FlowRun, def *FlowDef) {
 				return
 			}
 
-			// Check for pause (approval gate).
+			// Check for pause (approval gate) — wait for resume signal
+			// from ApproveNode/RejectNode instead of returning. This
+			// preserves single-writer semantics and keeps deliveredInputs.
 			if run.Status == FlowRunWaitingApproval {
-				return
+				select {
+				case <-ctx.Done():
+					run.Status = FlowRunCancelled
+					e.persistRun(run)
+					e.events.flowCancelled(run)
+					return
+				case approval := <-run.resumeCh:
+					run.Status = FlowRunRunning
+					e.propagateOutputs(run, def, approval.NodeID, approval.Output, deliveredInputs)
+					e.persistRun(run)
+				}
 			}
 
 			inflight += e.fireReadyNodes(ctx, run, def, results, deliveredInputs)
@@ -404,6 +451,13 @@ func (e *Engine) dispatch(ctx context.Context, run *FlowRun, def *FlowDef, node 
 		Services: e.services,
 		Engine:   e,
 	})
+}
+
+// getLiveRun returns the in-memory run object if the execute goroutine is active.
+func (e *Engine) getLiveRun(runID string) *FlowRun {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.runs[runID]
 }
 
 // --- Helpers ---

@@ -16,6 +16,7 @@ const (
 	TopicFlowCompleted       = "flow.completed"
 	TopicFlowFailed          = "flow.failed"
 	TopicFlowCancelled       = "flow.cancelled"
+	TopicFlowDebug           = "flow.debug"
 )
 
 // FlowEvent is the payload published to the NATS event bus.
@@ -142,5 +143,54 @@ func (e *eventEmitter) waitingApproval(run *FlowRun, nodeID string, input any) {
 		Status:   string(FlowRunWaitingApproval),
 		Output:   input,
 		ReplyTo:  run.ReplyTo,
+	})
+}
+
+func (e *eventEmitter) nodeSkipped(run *FlowRun, node *FlowNodeDef, errMsg string) {
+	e.publish(TopicFlowNodeSkipped, FlowEvent{
+		RunID:    run.ID,
+		FlowID:   run.FlowID,
+		FlowName: run.FlowName,
+		NodeID:   node.ID,
+		NodeType: node.Type,
+		UserID:   run.UserID,
+		Status:   string(NodeSkipped),
+		Error:    errMsg,
+	})
+}
+
+func (e *eventEmitter) flowApproved(run *FlowRun, nodeID string) {
+	e.publish(TopicFlowApproved, FlowEvent{
+		RunID:    run.ID,
+		FlowID:   run.FlowID,
+		FlowName: run.FlowName,
+		NodeID:   nodeID,
+		UserID:   run.UserID,
+		Status:   "approved",
+	})
+}
+
+func (e *eventEmitter) flowRejected(run *FlowRun, nodeID, feedback string) {
+	e.publish(TopicFlowRejected, FlowEvent{
+		RunID:    run.ID,
+		FlowID:   run.FlowID,
+		FlowName: run.FlowName,
+		NodeID:   nodeID,
+		UserID:   run.UserID,
+		Status:   "rejected",
+		Error:    feedback,
+	})
+}
+
+func (e *eventEmitter) debugEntry(run *FlowRun, entry DebugEntry) {
+	e.publish(TopicFlowDebug, FlowEvent{
+		RunID:    run.ID,
+		FlowID:   run.FlowID,
+		FlowName: run.FlowName,
+		NodeID:   entry.NodeID,
+		NodeType: "debug",
+		UserID:   run.UserID,
+		Status:   "debug",
+		Output:   entry,
 	})
 }

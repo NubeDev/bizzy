@@ -168,6 +168,41 @@ func ErrorSchema() *JSONSchema {
 
 // --- Data node schemas ---
 
+func DebugSchema() *JSONSchema {
+	return Object().
+		Title("Debug Settings").
+		Property("label", String().
+			Title("Label").
+			Desc("Display label in the debug panel. Defaults to the node ID.").
+			Build()).
+		Property("output", String().
+			Title("Output").
+			Desc("What to capture: payload (default), full msg, or a specific key from the payload.").
+			Default("payload").
+			Enum("payload", "full").
+			Build()).
+		Property("active", Bool().
+			Title("Active").
+			Desc("Uncheck to mute this debug node (messages pass through but are not logged).").
+			Default(true).
+			Build()).
+		Build()
+}
+
+func FunctionSchema() *JSONSchema {
+	return Object().
+		Title("Function Settings").
+		Property("code", String().
+			Title("Code").
+			Desc("JavaScript code. Receives msg, return modified msg. Use node.log(), flow.get()/set(), tools.call().").
+			Widget("code").
+			Build()).
+		Property("on_error", onErrorProp()).
+		Property("timeout", timeoutProp()).
+		Required("code").
+		Build()
+}
+
 func ValueSchema() *JSONSchema {
 	return Object().
 		Title("Value Settings").
@@ -303,15 +338,6 @@ func AIPromptSchema() *JSONSchema {
 			Desc("The prompt text. Can also be provided via the input port.").
 			Widget("textarea").
 			Build()).
-		Property("provider", String().
-			Title("Provider").
-			Desc("AI provider to use. Leave empty for default.").
-			Enum("claude", "openai", "ollama").
-			Build()).
-		Property("model", String().
-			Title("Model").
-			Desc("Model override. Leave empty for provider default.").
-			Build()).
 		Property("on_error", onErrorProp()).
 		Property("timeout", timeoutProp()).
 		Build()
@@ -435,6 +461,8 @@ func BuiltinSchemas() map[string]*JSONSchema {
 		"output":    OutputSchema(),
 		"error":     ErrorSchema(),
 		// Data.
+		"debug":        DebugSchema(),
+		"function":     FunctionSchema(),
 		"value":        ValueSchema(),
 		"template":     TemplateSchema(),
 		"http-request": HTTPRequestSchema(),

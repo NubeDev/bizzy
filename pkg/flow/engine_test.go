@@ -337,3 +337,165 @@ func TestErrorHandlingSkip(t *testing.T) {
 	}
 	t.Logf("skipped node error: %s", badState.Error)
 }
+
+// TestFunctionNode: trigger → function (JS code) → output.
+func TestFunctionNode(t *testing.T) {
+	e := testEngine(t)
+
+	def := &FlowDef{
+		Name: "test-function",
+		Nodes: []FlowNodeDef{
+			{ID: "trigger-1", Type: "trigger", Position: Position{X: 0, Y: 0}},
+			{ID: "fn-1", Type: "function", Position: Position{X: 100, Y: 0}, Data: map[string]any{
+				"code": `
+msg.payload = {
+	doubled: msg.payload.value * 2,
+	greeting: "hello from function"
+};
+msg.topic = "test";
+return msg;
+`,
+			}},
+			{ID: "output-1", Type: "output", Position: Position{X: 200, Y: 0}},
+		},
+		Edges: []FlowEdgeDef{
+			{ID: "e1", Source: "trigger-1", SourceHandle: "output", Target: "fn-1", TargetHandle: "input"},
+			{ID: "e2", Source: "fn-1", SourceHandle: "output", Target: "output-1", TargetHandle: "input"},
+		},
+	}
+
+	if err := e.Store().CreateFlow(def); err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := e.StartRun(context.Background(), def.ID, "user-1", map[string]any{"value": 21}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run = waitRun(t, e, run.ID, 5*time.Second)
+
+	if run.Status != FlowRunCompleted {
+		t.Fatalf("expected completed, got %s (error: %s)", run.Status, run.Error)
+	}
+
+	// Check the function node produced the right output.
+	fnState := run.NodeStates["fn-1"]
+	t.Logf("function output: %v", fnState.Output)
+
+	if fnState.Status != NodeCompleted {
+		t.Fatalf("function node status: %s (error: %s)", fnState.Status, fnState.Error)
+	}
+
+	// The output node extracts payload → flow output.
+	if run.Output == nil {
+		t.Fatal("expected flow output, got nil")
+	}
+	if run.Output["doubled"] != float64(42) {
+		t.Errorf("expected doubled=42, got %v", run.Output["doubled"])
+	}
+	if run.Output["greeting"] != "hello from function" {
+		t.Errorf("expected greeting='hello from function', got %v", run.Output["greeting"])
+	}
+}
+
+// TestFunctionNodeFlowState: function node using flow.get/set for persistent state.
+func TestFunctionNodeFlowState(t *testing.T) {
+	e := testEngine(t)
+
+	def := &FlowDef{
+		Name: "test-fn-state",
+		Nodes: []FlowNodeDef{
+			{ID: "trigger-1", Type: "trigger", Position: Position{X: 0, Y: 0}},
+			{ID: "fn-1", Type: "function", Position: Position{X: 100, Y: 0}, Data: map[string]any{
+				"code": `
+var count = flow.get("counter") || 0;
+count++;
+flow.set("counter", count);
+msg.payload = { count: count };
+return msg;
+`,
+			}},
+			{ID: "output-1", Type: "output", Position: Position{X: 200, Y: 0}},
+		},
+		Edges: []FlowEdgeDef{
+			{ID: "e1", Source: "trigger-1", SourceHandle: "output", Target: "fn-1", TargetHandle: "input"},
+			{ID: "e2", Source: "fn-1", SourceHandle: "output", Target: "output-1", TargetHandle: "input"},
+		},
+	}
+
+	if err := e.Store().CreateFlow(def); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deploy so flow state is available.
+	e.Deploy(context.Background(), def)
+
+	// Run twice — counter should increment.
+	run1, err := e.StartRun(context.Background(), def.ID, "user-1", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run1 = waitRun(t, e, run1.ID, 5*time.Second)
+	if run1.Status != FlowRunCompleted {
+		t.Fatalf("run 1: expected completed, got %s (error: %s)", run1.Status, run1.Error)
+	}
+	t.Logf("run 1 output: %v", run1.Output)
+
+	run2, err := e.StartRun(context.Background(), def.ID, "user-1", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run2 = waitRun(t, e, run2.ID, 5*time.Second)
+	if run2.Status != FlowRunCompleted {
+		t.Fatalf("run 2: expected completed, got %s (error: %s)", run2.Status, run2.Error)
+	}
+	t.Logf("run 2 output: %v", run2.Output)
+
+	// Second run should have count=2.
+	if run2.Output["count"] != float64(2) {
+		t.Errorf("expected count=2 on second run, got %v", run2.Output["count"])
+	}
+}
+
+// TestFunctionNodePassthrough: function with no code passes msg through.
+func TestFunctionNodePassthrough(t *testing.T) {
+	e := testEngine(t)
+
+	def := &FlowDef{
+		Name: "test-fn-passthrough",
+		Nodes: []FlowNodeDef{
+			{ID: "trigger-1", Type: "trigger", Position: Position{X: 0, Y: 0}},
+			{ID: "fn-1", Type: "function", Position: Position{X: 100, Y: 0}, Data: map[string]any{}},
+			{ID: "output-1", Type: "output", Position: Position{X: 200, Y: 0}},
+		},
+		Edges: []FlowEdgeDef{
+			{ID: "e1", Source: "trigger-1", SourceHandle: "output", Target: "fn-1", TargetHandle: "input"},
+			{ID: "e2", Source: "fn-1", SourceHandle: "output", Target: "output-1", TargetHandle: "input"},
+		},
+	}
+
+	if err := e.Store().CreateFlow(def); err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := e.StartRun(context.Background(), def.ID, "user-1", map[string]any{"value": 99}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run = waitRun(t, e, run.ID, 5*time.Second)
+
+	if run.Status != FlowRunCompleted {
+		t.Fatalf("expected completed, got %s (error: %s)", run.Status, run.Error)
+	}
+
+	// No code = passthrough, payload should survive.
+	if run.Output == nil {
+		t.Fatal("expected flow output, got nil")
+	}
+	if run.Output["value"] != float64(99) {
+		t.Errorf("expected value=99, got %v", run.Output["value"])
+	}
+	t.Logf("passthrough output: %v", run.Output)
+}

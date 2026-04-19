@@ -176,7 +176,7 @@ func (b *appToolBridge) AppTools(appName string) []flow.AppToolManifest {
 	for i, t := range tools {
 		params := make(map[string]flow.AppToolParam, len(t.Params))
 		for k, v := range t.Params {
-			params[k] = flow.AppToolParam{Type: v.Type, Required: v.Required}
+			params[k] = flow.AppToolParam{Type: v.Type, Required: v.Required, Description: v.Description}
 		}
 		out[i] = flow.AppToolManifest{
 			Name:        t.Name,

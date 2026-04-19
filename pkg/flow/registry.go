@@ -172,6 +172,22 @@ func (r *NodeTypeRegistry) registerBuiltins() {
 
 	// Data nodes
 	r.Register(NodeTypeDef{
+		Type: "debug", Label: "Debug", Category: "data", Source: "builtin",
+		Description: "Passthrough node that captures messages for inspection. Shows in the debug panel without modifying the flow.",
+		Ports: PortsDef{
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
+		},
+	})
+	r.Register(NodeTypeDef{
+		Type: "function", Label: "Function", Category: "data", Source: "builtin",
+		Description: "Write JavaScript to transform msg. Has access to flow state, tools, and platform APIs. Like Node-RED's function node.",
+		Ports: PortsDef{
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
+		},
+	})
+	r.Register(NodeTypeDef{
 		Type: "value", Label: "Value", Category: "data", Source: "builtin",
 		Description: "Emits a static value configured on the node. Great for testing.",
 		Ports: PortsDef{
@@ -188,10 +204,10 @@ func (r *NodeTypeRegistry) registerBuiltins() {
 	})
 	r.Register(NodeTypeDef{
 		Type: "http-request", Label: "HTTP Request", Category: "data", Source: "builtin",
-		Description: "Makes an HTTP request and returns the response. No external service needed.",
+		Description: "Makes an HTTP request. msg.url, msg.method, msg.headers override settings. msg.payload becomes the body for POST/PUT.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "url", Label: "URL", Type: "string"}, {Handle: "method", Label: "Method", Type: "string"}, {Handle: "body", Label: "Body", Type: "any"}, {Handle: "headers", Label: "Headers", Type: "object"}},
-			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "object"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any"}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 	r.Register(NodeTypeDef{
@@ -231,42 +247,42 @@ func (r *NodeTypeRegistry) registerBuiltins() {
 	// Integration nodes
 	r.Register(NodeTypeDef{
 		Type: "ai-prompt", Label: "AI Prompt", Category: "integration", Source: "builtin",
-		Description: "Run an AI prompt (single-turn, no tools).",
+		Description: "Run an AI prompt. msg.payload or msg.prompt is the prompt text. msg.provider/model override settings.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "prompt", Label: "Prompt", Type: "string", Required: true}, {Handle: "provider", Label: "Provider", Type: "string"}, {Handle: "model", Label: "Model", Type: "string"}},
-			Outputs: []PortDef{{Handle: "result", Label: "Result", Type: "string"}, {Handle: "error", Label: "Error", Type: "string"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 	r.Register(NodeTypeDef{
 		Type: "ai-runner", Label: "AI Runner", Category: "integration", Source: "builtin",
-		Description: "Run a full AI coding session via airunner.",
+		Description: "Run a full AI coding session. msg.payload or msg.prompt is the prompt. msg.work_dir/provider/model override settings.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "prompt", Label: "Prompt", Type: "string", Required: true}, {Handle: "work_dir", Label: "Work Dir", Type: "string"}},
-			Outputs: []PortDef{{Handle: "result", Label: "Result", Type: "object"}, {Handle: "error", Label: "Error", Type: "string"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 	r.Register(NodeTypeDef{
 		Type: "slack-send", Label: "Slack Send", Category: "integration", Source: "builtin",
-		Description: "Send a Slack message.",
+		Description: "Send a Slack message. msg.payload is the message text. msg.channel/thread_ts override settings.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "channel", Label: "Channel", Type: "string", Required: true}, {Handle: "message", Label: "Message", Type: "string", Required: true}, {Handle: "thread_ts", Label: "Thread TS", Type: "string"}},
-			Outputs: []PortDef{{Handle: "result", Label: "Result", Type: "object"}, {Handle: "error", Label: "Error", Type: "string"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 	r.Register(NodeTypeDef{
 		Type: "email-send", Label: "Email Send", Category: "integration", Source: "builtin",
-		Description: "Send an email via SMTP.",
+		Description: "Send an email. msg.payload is the body. msg.to/subject override settings.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "to", Label: "To", Type: "string", Required: true}, {Handle: "subject", Label: "Subject", Type: "string", Required: true}, {Handle: "body", Label: "Body", Type: "string", Required: true}},
-			Outputs: []PortDef{{Handle: "result", Label: "Result", Type: "object"}, {Handle: "error", Label: "Error", Type: "string"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any", Required: true}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 	r.Register(NodeTypeDef{
 		Type: "webhook-call", Label: "Webhook Call", Category: "integration", Source: "builtin",
-		Description: "Make an HTTP request.",
+		Description: "HTTP request. msg.url/method/headers override settings. msg.payload is the body.",
 		Ports: PortsDef{
-			Inputs:  []PortDef{{Handle: "url", Label: "URL", Type: "string", Required: true}, {Handle: "method", Label: "Method", Type: "string"}, {Handle: "headers", Label: "Headers", Type: "object"}, {Handle: "body", Label: "Body", Type: "any"}},
-			Outputs: []PortDef{{Handle: "response", Label: "Response", Type: "object"}, {Handle: "error", Label: "Error", Type: "string"}},
+			Inputs:  []PortDef{{Handle: "input", Label: "Input", Type: "any"}},
+			Outputs: []PortDef{{Handle: "output", Label: "Output", Type: "any"}},
 		},
 	})
 

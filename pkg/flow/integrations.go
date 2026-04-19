@@ -23,7 +23,16 @@ func RegisterIntegrationExecutors(r *ExecutorRegistry) {
 }
 
 func executeAIPrompt(ctx context.Context, ec *ExecContext) (any, error) {
-	prompt := resolveString(ec.Node.Data, ec.Inputs, "prompt")
+	msg := inputMsg(ec)
+
+	// msg.payload or msg.prompt override node settings.
+	prompt := resolveFromMsg(msg, ec.Node.Data, "prompt")
+	if prompt == "" {
+		// If payload is a string, use it as the prompt directly.
+		if s, ok := MsgPayload(msg).(string); ok && s != "" {
+			prompt = s
+		}
+	}
 	if prompt == "" {
 		return nil, fmt.Errorf("ai-prompt node %s: missing prompt", ec.Node.ID)
 	}
@@ -34,20 +43,35 @@ func executeAIPrompt(ctx context.Context, ec *ExecContext) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return MsgSet(msg, result), nil
 }
 
 func executeAIRunnerNode(ctx context.Context, ec *ExecContext) (any, error) {
-	provider := resolveString(ec.Node.Data, ec.Inputs, "provider")
-	model := resolveString(ec.Node.Data, ec.Inputs, "model")
-	prompt := resolveString(ec.Node.Data, ec.Inputs, "prompt")
-	workDir := resolveString(ec.Node.Data, ec.Inputs, "work_dir")
+	msg := inputMsg(ec)
+	provider := resolveFromMsg(msg, ec.Node.Data, "provider")
+	model := resolveFromMsg(msg, ec.Node.Data, "model")
+	prompt := resolveFromMsg(msg, ec.Node.Data, "prompt")
+	workDir := resolveFromMsg(msg, ec.Node.Data, "work_dir")
+
+	// If payload is a string and no prompt set, use payload as prompt.
+	if prompt == "" {
+		if s, ok := MsgPayload(msg).(string); ok && s != "" {
+			prompt = s
+		}
+	}
 
 	if prompt == "" {
 		return nil, fmt.Errorf("ai-runner node %s: missing prompt", ec.Node.ID)
 	}
 	if ec.Services.Agents == nil {
 		return nil, fmt.Errorf("ai-runner node %s: no agent runner registry configured", ec.Node.ID)
+	}
+
+	// Apply timeout_mins from schema (default 30 mins).
+	if timeoutMins := getIntOrDefault(ec.Node.Data, "timeout_mins", 30); timeoutMins > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMins)*time.Minute)
+		defer cancel()
 	}
 
 	runner, err := ec.Services.Agents.Get(airunner.Provider(provider))
@@ -92,7 +116,7 @@ func executeAIRunnerNode(ctx context.Context, ec *ExecContext) (any, error) {
 		return nil, fmt.Errorf("ai-runner node %s: session returned empty result", ec.Node.ID)
 	}
 
-	return map[string]any{
+	out := MsgSet(msg, map[string]any{
 		"text":          result.Text,
 		"provider":      result.Provider,
 		"model":         result.Model,
@@ -103,26 +127,45 @@ func executeAIRunnerNode(ctx context.Context, ec *ExecContext) (any, error) {
 		"output_tokens": result.OutputTokens,
 		"tool_calls":    result.ToolCalls,
 		"tool_call_log": result.ToolCallLog,
-	}, nil
+	})
+	return out, nil
 }
 
 func executeSlackSendNode(ctx context.Context, ec *ExecContext) (any, error) {
-	channel := resolveString(ec.Node.Data, ec.Inputs, "channel")
-	message := resolveString(ec.Node.Data, ec.Inputs, "message")
+	msg := inputMsg(ec)
+
+	// msg.channel, msg.payload (as message text) override settings.
+	channel := resolveFromMsg(msg, ec.Node.Data, "channel")
+	message := resolveFromMsg(msg, ec.Node.Data, "message")
+	if message == "" {
+		if s, ok := MsgPayload(msg).(string); ok {
+			message = s
+		}
+	}
 	if channel == "" || message == "" {
 		return nil, fmt.Errorf("slack-send node %s: missing channel or message", ec.Node.ID)
 	}
 	if ec.Services.Slack == nil {
 		return nil, fmt.Errorf("slack-send node %s: slack adapter not configured", ec.Node.ID)
 	}
-	threadTS := resolveString(ec.Node.Data, ec.Inputs, "thread_ts")
-	return ec.Services.Slack.SendMessage(ctx, channel, message, threadTS)
+	threadTS := resolveFromMsg(msg, ec.Node.Data, "thread_ts")
+	result, err := ec.Services.Slack.SendMessage(ctx, channel, message, threadTS)
+	if err != nil {
+		return nil, err
+	}
+	return MsgSet(msg, result), nil
 }
 
 func executeEmailSendNode(ctx context.Context, ec *ExecContext) (any, error) {
-	to := resolveString(ec.Node.Data, ec.Inputs, "to")
-	subject := resolveString(ec.Node.Data, ec.Inputs, "subject")
-	body := resolveString(ec.Node.Data, ec.Inputs, "body")
+	msg := inputMsg(ec)
+	to := resolveFromMsg(msg, ec.Node.Data, "to")
+	subject := resolveFromMsg(msg, ec.Node.Data, "subject")
+	body := resolveFromMsg(msg, ec.Node.Data, "body")
+	if body == "" {
+		if s, ok := MsgPayload(msg).(string); ok {
+			body = s
+		}
+	}
 	if to == "" || subject == "" {
 		return nil, fmt.Errorf("email-send node %s: missing to or subject", ec.Node.ID)
 	}
@@ -132,22 +175,26 @@ func executeEmailSendNode(ctx context.Context, ec *ExecContext) (any, error) {
 	if err := ec.Services.Email.SendEmail(ctx, to, subject, body); err != nil {
 		return nil, fmt.Errorf("email-send node %s: %w", ec.Node.ID, err)
 	}
-	return map[string]any{"sent": true, "to": to, "subject": subject}, nil
+	return MsgSet(msg, map[string]any{"sent": true, "to": to, "subject": subject}), nil
 }
 
 func executeWebhookCallNode(ctx context.Context, ec *ExecContext) (any, error) {
-	url := resolveString(ec.Node.Data, ec.Inputs, "url")
+	msg := inputMsg(ec)
+
+	url := resolveFromMsg(msg, ec.Node.Data, "url")
 	if url == "" {
 		return nil, fmt.Errorf("webhook-call node %s: missing url", ec.Node.ID)
 	}
-	method := resolveString(ec.Node.Data, ec.Inputs, "method")
+	method := resolveFromMsg(msg, ec.Node.Data, "method")
 	if method == "" {
 		method = "GET"
 	}
 
+	// msg.payload becomes the request body for POST/PUT/PATCH.
 	var reqBody io.Reader
-	if bodyVal, ok := ec.Inputs["body"]; ok && bodyVal != nil {
-		bodyBytes, err := json.Marshal(bodyVal)
+	payload := MsgPayload(msg)
+	if payload != nil && (method == "POST" || method == "PUT" || method == "PATCH") {
+		bodyBytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("webhook-call node %s: marshal body: %w", ec.Node.ID, err)
 		}
@@ -158,31 +205,33 @@ func executeWebhookCallNode(ctx context.Context, ec *ExecContext) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("webhook-call node %s: create request: %w", ec.Node.ID, err)
 	}
-	if headers, ok := ec.Inputs["headers"].(map[string]any); ok {
-		for k, v := range headers {
-			req.Header.Set(k, fmt.Sprintf("%v", v))
+	if msgHdrs, ok := MsgGet(msg, "headers"); ok {
+		if hdrs, ok := msgHdrs.(map[string]any); ok {
+			for k, v := range hdrs {
+				req.Header.Set(k, fmt.Sprintf("%v", v))
+			}
 		}
 	}
 	if req.Header.Get("Content-Type") == "" && reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := sharedHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("webhook-call node %s: %w", ec.Node.ID, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	result := map[string]any{"status": resp.StatusCode, "status_text": resp.Status}
-	var jsonBody any
-	if json.Unmarshal(respBody, &jsonBody) == nil {
-		result["body"] = jsonBody
-	} else {
-		result["body"] = string(respBody)
+	var responsePayload any
+	if json.Unmarshal(respBody, &responsePayload) != nil {
+		responsePayload = string(respBody)
 	}
-	return result, nil
+
+	out := MsgSet(msg, responsePayload)
+	out["statusCode"] = resp.StatusCode
+	out["headers"] = headerMap(resp.Header)
+	return out, nil
 }
 
 func executeToolCall(ctx context.Context, ec *ExecContext) (any, error) {
@@ -190,6 +239,38 @@ func executeToolCall(ctx context.Context, ec *ExecContext) (any, error) {
 		return nil, fmt.Errorf("tool node %s: no tool caller configured", ec.Node.ID)
 	}
 	toolName := ec.Node.Type[len("tool:"):]
-	return ec.Services.Tools.CallTool(ctx, ec.Run.UserID, toolName, ec.Inputs)
+	msg := inputMsg(ec)
+
+	// Build params: node settings (config panel) are defaults.
+	// msg-level properties override settings. msg.payload is the primary
+	// data — if it's a map, its keys override too (Node-RED pattern).
+	params := make(map[string]any)
+	for k, v := range ec.Node.Data {
+		if k == "on_error" || k == "max_retries" || k == "timeout" {
+			continue
+		}
+		params[k] = v
+	}
+	// msg-level overrides (e.g. msg.filter, msg.limit).
+	if m, ok := msg.(map[string]any); ok {
+		for k, v := range m {
+			if k == "payload" || k == "_msgid" || k == "_timestamp" || k == "topic" {
+				continue
+			}
+			params[k] = v
+		}
+	}
+	// msg.payload overrides (highest priority).
+	if payload, ok := MsgPayload(msg).(map[string]any); ok {
+		for k, v := range payload {
+			params[k] = v
+		}
+	}
+
+	result, err := ec.Services.Tools.CallTool(ctx, ec.Run.UserID, toolName, params)
+	if err != nil {
+		return nil, err
+	}
+	return MsgSet(msg, result), nil
 }
 

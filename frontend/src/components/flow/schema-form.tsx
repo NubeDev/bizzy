@@ -1,4 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, lazy, Suspense } from 'react'
+
+const CodeEditor = lazy(() =>
+  import('./code-editor').then((m) => ({ default: m.CodeEditor })),
+)
 
 /**
  * JSON Schema type matching the backend's settings.JSONSchema struct.
@@ -144,8 +148,30 @@ function SchemaField({ name, schema, value, required, onChange }: SchemaFieldPro
 
   // String with widget or format overrides.
   if (schema.type === 'string') {
-    // Code / textarea / json widgets → textarea.
-    if (widget === 'code' || widget === 'textarea' || widget === 'json') {
+    // Code widget → CodeMirror editor.
+    if (widget === 'code') {
+      return (
+        <Field label={schema.title || name} description={schema.description} required={required}>
+          <Suspense fallback={
+            <textarea
+              value={String(resolvedValue ?? '')}
+              onChange={(e) => handleChange(e.target.value)}
+              className="w-full px-2 py-1 text-xs bg-background border border-border rounded font-mono resize-y min-h-[120px]"
+              placeholder={schema.description}
+            />
+          }>
+            <CodeEditor
+              value={String(resolvedValue ?? '')}
+              onChange={(v) => handleChange(v)}
+              placeholder={schema.description}
+            />
+          </Suspense>
+        </Field>
+      )
+    }
+
+    // Textarea / json widgets → textarea.
+    if (widget === 'textarea' || widget === 'json') {
       return (
         <Field label={schema.title || name} description={schema.description} required={required}>
           <textarea
@@ -167,7 +193,7 @@ function SchemaField({ name, schema, value, required, onChange }: SchemaFieldPro
             }}
             disabled={schema.readOnly}
             className={`w-full px-2 py-1 text-xs bg-background border border-border rounded resize-y min-h-[60px] ${
-              widget === 'code' || widget === 'json' ? 'font-mono' : ''
+              widget === 'json' ? 'font-mono' : ''
             }`}
             placeholder={schema.description}
           />

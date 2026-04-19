@@ -10,70 +10,58 @@ import (
 // --- Approval API ---
 
 // ApproveNode resumes a flow run after an approval gate.
-func (e *Engine) ApproveNode(ctx context.Context, runID, nodeID string) error {
-	run, err := e.store.GetRun(runID)
-	if err != nil {
-		return fmt.Errorf("run not found: %w", err)
-	}
-	if run.Status != FlowRunWaitingApproval {
-		return fmt.Errorf("run is not waiting for approval (status: %s)", run.Status)
-	}
-
-	def, err := e.store.GetFlow(run.FlowID)
-	if err != nil {
-		return fmt.Errorf("flow not found: %w", err)
+// Instead of launching a new execute goroutine, it signals the existing one
+// via run.resumeCh to preserve single-writer semantics.
+func (e *Engine) ApproveNode(_ context.Context, runID, nodeID string) error {
+	liveRun := e.getLiveRun(runID)
+	if liveRun == nil {
+		return fmt.Errorf("run %s is not active in memory", runID)
 	}
 
-	state := run.NodeStates[nodeID]
+	state := liveRun.GetNodeState(nodeID)
 	if state.Status != NodeWaiting {
 		return fmt.Errorf("node %s is not waiting for approval", nodeID)
 	}
 
+	now := time.Now()
 	state.Status = NodeCompleted
 	state.Output = PortOutput{Port: "approved", Value: state.Input}
-	run.NodeStates[nodeID] = state
-	run.Status = FlowRunRunning
+	state.FinishedAt = &now
+	liveRun.SetNodeState(nodeID, state)
 
-	// Rebuild deliveredInputs from completed node outputs.
-	deliveredInputs := rebuildDeliveredInputs(run, def)
+	e.events.flowApproved(liveRun, nodeID)
 
-	e.propagateOutputs(run, def, nodeID, state.Output, deliveredInputs)
-	e.persistRun(run)
-
-	go e.execute(ctx, run, def)
+	liveRun.resumeCh <- approvalResult{
+		NodeID: nodeID,
+		Output: state.Output,
+	}
 	return nil
 }
 
 // RejectNode rejects an approval gate and resumes with the rejection path.
-func (e *Engine) RejectNode(ctx context.Context, runID, nodeID, feedback string) error {
-	run, err := e.store.GetRun(runID)
-	if err != nil {
-		return fmt.Errorf("run not found: %w", err)
-	}
-	if run.Status != FlowRunWaitingApproval {
-		return fmt.Errorf("run is not waiting for approval (status: %s)", run.Status)
+func (e *Engine) RejectNode(_ context.Context, runID, nodeID, feedback string) error {
+	liveRun := e.getLiveRun(runID)
+	if liveRun == nil {
+		return fmt.Errorf("run %s is not active in memory", runID)
 	}
 
-	def, err := e.store.GetFlow(run.FlowID)
-	if err != nil {
-		return fmt.Errorf("flow not found: %w", err)
-	}
-
-	state := run.NodeStates[nodeID]
+	state := liveRun.GetNodeState(nodeID)
 	if state.Status != NodeWaiting {
 		return fmt.Errorf("node %s is not waiting for approval", nodeID)
 	}
 
+	now := time.Now()
 	state.Status = NodeCompleted
 	state.Output = PortOutput{Port: "rejected", Value: feedback}
-	run.NodeStates[nodeID] = state
-	run.Status = FlowRunRunning
+	state.FinishedAt = &now
+	liveRun.SetNodeState(nodeID, state)
 
-	deliveredInputs := rebuildDeliveredInputs(run, def)
-	e.propagateOutputs(run, def, nodeID, state.Output, deliveredInputs)
-	e.persistRun(run)
+	e.events.flowRejected(liveRun, nodeID, feedback)
 
-	go e.execute(ctx, run, def)
+	liveRun.resumeCh <- approvalResult{
+		NodeID: nodeID,
+		Output: state.Output,
+	}
 	return nil
 }
 
@@ -112,13 +100,13 @@ func (e *Engine) RecoverRuns() {
 		log.Printf("[flow] recovery: failed to list running runs: %v", err)
 		return
 	}
-	for _, run := range runs {
-		run.Status = FlowRunFailed
-		run.Error = "interrupted by server restart"
+	for i := range runs {
+		runs[i].Status = FlowRunFailed
+		runs[i].Error = "interrupted by server restart"
 		now := time.Now()
-		run.FinishedAt = &now
-		e.store.SaveRun(&run)
-		log.Printf("[flow] recovery: marked run %s as failed (interrupted)", run.ID)
+		runs[i].FinishedAt = &now
+		e.store.SaveRun(&runs[i])
+		log.Printf("[flow] recovery: marked run %s as failed (interrupted)", runs[i].ID)
 	}
 
 	// Re-queue pending runs.
@@ -127,17 +115,18 @@ func (e *Engine) RecoverRuns() {
 		log.Printf("[flow] recovery: failed to list pending runs: %v", err)
 		return
 	}
-	for _, run := range pending {
-		def, err := e.store.GetFlow(run.FlowID)
+	for i := range pending {
+		def, err := e.store.GetFlow(pending[i].FlowID)
 		if err != nil {
-			log.Printf("[flow] recovery: flow %s not found for run %s, marking failed", run.FlowID, run.ID)
-			run.Status = FlowRunFailed
-			run.Error = "flow definition not found"
-			e.store.SaveRun(&run)
+			log.Printf("[flow] recovery: flow %s not found for run %s, marking failed", pending[i].FlowID, pending[i].ID)
+			pending[i].Status = FlowRunFailed
+			pending[i].Error = "flow definition not found"
+			e.store.SaveRun(&pending[i])
 			continue
 		}
-		log.Printf("[flow] recovery: re-queuing pending run %s", run.ID)
-		go e.execute(context.Background(), &run, def)
+		log.Printf("[flow] recovery: re-queuing pending run %s", pending[i].ID)
+		pending[i].resumeCh = make(chan approvalResult, 1)
+		go e.execute(context.Background(), &pending[i], def)
 	}
 
 	// Waiting-approval runs need no action.
@@ -167,9 +156,18 @@ func rebuildDeliveredInputs(run *FlowRun, def *FlowDef) map[string]map[string]an
 	return delivered
 }
 
+// subgraphResult holds the node states produced by a single foreach iteration.
+// States are collected locally to avoid concurrent writes to run.NodeStates.
+type subgraphResult struct {
+	Value  any
+	States map[string]NodeState
+}
+
 // executeSubgraph runs a subset of nodes sequentially (for foreach iterations).
-func (e *Engine) executeSubgraph(ctx context.Context, run *FlowRun, def *FlowDef, subgraphNodeIDs []string, iterPrefix string, input any) (any, error) {
+// It writes to a local state map; the caller merges results into run.NodeStates.
+func (e *Engine) executeSubgraph(ctx context.Context, run *FlowRun, def *FlowDef, subgraphNodeIDs []string, iterPrefix string, input any) (*subgraphResult, error) {
 	currentValue := input
+	localStates := make(map[string]NodeState, len(subgraphNodeIDs))
 
 	for _, nodeID := range subgraphNodeIDs {
 		select {
@@ -185,21 +183,21 @@ func (e *Engine) executeSubgraph(ctx context.Context, run *FlowRun, def *FlowDef
 
 		stateKey := fmt.Sprintf("%s:%s", iterPrefix, nodeID)
 		now := time.Now()
-		run.NodeStates[stateKey] = NodeState{Status: NodeRunning, StartedAt: &now}
+		localStates[stateKey] = NodeState{Status: NodeRunning, StartedAt: &now}
 
 		inputs := map[string]any{"input": currentValue, "item": input}
 		output, err := e.dispatch(ctx, run, def, nodeDef, inputs)
 
 		finished := time.Now()
 		if err != nil {
-			run.NodeStates[stateKey] = NodeState{
+			localStates[stateKey] = NodeState{
 				Status: NodeFailed, Error: err.Error(),
 				StartedAt: &now, FinishedAt: &finished,
 			}
 			return nil, err
 		}
 
-		run.NodeStates[stateKey] = NodeState{
+		localStates[stateKey] = NodeState{
 			Status: NodeCompleted, Output: output,
 			StartedAt: &now, FinishedAt: &finished,
 			DurationMS: int(finished.Sub(now).Milliseconds()),
@@ -211,6 +209,6 @@ func (e *Engine) executeSubgraph(ctx context.Context, run *FlowRun, def *FlowDef
 			currentValue = output
 		}
 	}
-	return currentValue, nil
+	return &subgraphResult{Value: currentValue, States: localStates}, nil
 }
 

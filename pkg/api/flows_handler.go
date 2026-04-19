@@ -32,7 +32,13 @@ func (a *API) createFlow(c *gin.Context) {
 	}
 
 	// Deploy the flow so its trigger is active.
-	a.FlowEngine.Deploy(context.Background(), &def)
+	if err := a.FlowEngine.Deploy(context.Background(), &def); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"flow":           def,
+			"deploy_warning": "flow saved but trigger failed to deploy: " + err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, def)
 }
@@ -89,7 +95,13 @@ func (a *API) updateFlow(c *gin.Context) {
 	}
 
 	// Re-deploy to pick up trigger changes.
-	a.FlowEngine.Deploy(context.Background(), &def)
+	if err := a.FlowEngine.Deploy(context.Background(), &def); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"flow":           def,
+			"deploy_warning": "flow saved but trigger failed to deploy: " + err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, def)
 }

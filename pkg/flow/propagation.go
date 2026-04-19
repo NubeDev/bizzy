@@ -159,6 +159,7 @@ func (e *Engine) handleNodeError(run *FlowRun, def *FlowDef, res nodeResult, del
 		state.Status = NodeSkipped
 		state.Error = res.Error.Error()
 		run.NodeStates[res.NodeID] = state
+		e.events.nodeSkipped(run, node, res.Error.Error())
 		e.propagateOutputs(run, def, res.NodeID, nil, deliveredInputs)
 		return true
 

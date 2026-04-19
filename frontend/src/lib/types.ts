@@ -235,6 +235,14 @@ export interface NodeState {
   retries?: number
 }
 
+export interface DebugEntry {
+  ts: string
+  node_id: string
+  label: string
+  msg_id: string
+  value: unknown
+}
+
 export interface FlowRun {
   id: string
   flow_id: string
@@ -245,6 +253,7 @@ export interface FlowRun {
   output?: unknown
   node_states: Record<string, NodeState>
   variables?: Record<string, unknown>
+  debug_log?: DebugEntry[]
   error?: string
   user_id: string
   created_at: string

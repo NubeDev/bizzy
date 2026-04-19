@@ -144,7 +144,31 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
-  // Merge execution state into nodes when polling updates.
+  // Sync edges when the flow definition loads/changes.
+  // useEdgesState only uses its argument as the initial value, so if flowEdges
+  // arrives after mount (async fetch), edges would be empty without this.
+  const prevEdgesKey = useRef('')
+  useEffect(() => {
+    const key = flowEdges.map((e) => e.id).join(',')
+    if (key && key !== prevEdgesKey.current) {
+      prevEdgesKey.current = key
+      setEdges(rfEdges)
+    }
+  }, [rfEdges, flowEdges, setEdges])
+
+  // Sync nodes when the flow definition or node type catalog loads.
+  // Same issue as edges — nodeTypeDefs may arrive after the initial render,
+  // which means ports are missing until we resync.
+  const prevNodesKey = useRef('')
+  useEffect(() => {
+    const key = flowNodes.map((n) => n.id).join(',') + '|' + Object.keys(nodeTypeDefs).length
+    if (key && key !== prevNodesKey.current) {
+      prevNodesKey.current = key
+      setNodes(rfNodes)
+    }
+  }, [rfNodes, flowNodes, nodeTypeDefs, setNodes])
+
+  // Merge execution state into nodes when WS updates arrive.
   // Compares by JSON to avoid creating new node objects when nothing changed.
   const prevNodeStatesJson = useRef<Record<string, string>>({})
   useEffect(() => {

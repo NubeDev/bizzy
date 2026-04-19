@@ -9,15 +9,11 @@ import (
 	"github.com/NubeDev/bizzy/pkg/auth"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
+	"github.com/NubeDev/bizzy/pkg/ws"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 )
 
 // --- WebSocket: GET /api/agents/run?token=<token> ---
-
-var wsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
 
 // wsRequest is the first message the client sends after connecting.
 type wsRequest struct {
@@ -41,26 +37,12 @@ type wsRequest struct {
 func (a *API) runAgentWS(c *gin.Context) {
 	log.Printf("[agents-ws] new connection from %s", c.Request.RemoteAddr)
 
-	// Auth via query param (browsers can't set headers on WS upgrade).
-	// Dev mode: if no token, fall back to first user.
-	var user models.User
-	token := c.Query("token")
-	if token != "" {
-		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
-			log.Printf("[agents-ws] invalid token")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
-		}
-	} else {
-		if err := a.DB.First(&user).Error; err != nil {
-			log.Printf("[agents-ws] no users exist")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users — POST /bootstrap first"})
-			return
-		}
-		log.Printf("[agents-ws] dev mode: using user %s (%s)", user.ID, user.Name)
+	user, ok := ws.AuthFromQuery(c, a.DB)
+	if !ok {
+		return
 	}
 
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := ws.Upgrade(c.Writer, c.Request)
 	if err != nil {
 		log.Printf("[agents-ws] upgrade failed: %v", err)
 		return
@@ -209,14 +191,9 @@ func (a *API) runAgentWS(c *gin.Context) {
 		JobStatus: string(job.Status),
 		Result:    result,
 	})
-
-	conn.WriteMessage(
-		websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-	)
 }
 
-func sendWSError(conn *websocket.Conn, sessionID, msg string) {
+func sendWSError(conn *ws.Conn, sessionID, msg string) {
 	conn.WriteJSON(airunner.Event{Type: "error", SessionID: sessionID, Error: msg})
 }
 

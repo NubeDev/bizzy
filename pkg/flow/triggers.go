@@ -119,6 +119,10 @@ func (t *IntervalTrigger) Stop() error {
 }
 
 // --- Cron matching ---
+//
+// Supports standard 5-field cron: minute hour dom month dow
+// Each field supports: *, integers, ranges (1-5), lists (1,3,5),
+// steps (*/5, 1-30/2), and combinations (1-5,10,15-20).
 
 func matchesCron(expr string, t time.Time) bool {
 	var minute, hour, dom, month, dow string
@@ -127,22 +131,104 @@ func matchesCron(expr string, t time.Time) bool {
 		return false
 	}
 
-	return fieldMatches(minute, t.Minute()) &&
-		fieldMatches(hour, t.Hour()) &&
-		fieldMatches(dom, t.Day()) &&
-		fieldMatches(month, int(t.Month())) &&
-		fieldMatches(dow, int(t.Weekday()))
+	return fieldMatches(minute, t.Minute(), 0, 59) &&
+		fieldMatches(hour, t.Hour(), 0, 23) &&
+		fieldMatches(dom, t.Day(), 1, 31) &&
+		fieldMatches(month, int(t.Month()), 1, 12) &&
+		fieldMatches(dow, int(t.Weekday()), 0, 6)
 }
 
-func fieldMatches(field string, value int) bool {
+// fieldMatches checks if value is matched by a cron field expression.
+// min/max define the valid range for this field (used for */step expansion).
+func fieldMatches(field string, value, min, max int) bool {
 	if field == "*" {
 		return true
 	}
-	var v int
-	if _, err := fmt.Sscanf(field, "%d", &v); err == nil {
-		return v == value
+	// Split on comma for lists: "1,3,5" or "1-5,10"
+	for _, part := range splitComma(field) {
+		if partMatches(part, value, min, max) {
+			return true
+		}
 	}
 	return false
+}
+
+// partMatches handles a single element: "5", "1-5", "*/2", "1-30/2"
+func partMatches(part string, value, min, max int) bool {
+	// Check for step: "*/5" or "1-30/2"
+	step := 1
+	if idx := indexOf(part, '/'); idx >= 0 {
+		s, ok := atoi(part[idx+1:])
+		if !ok || s <= 0 {
+			return false
+		}
+		step = s
+		part = part[:idx]
+	}
+
+	// Now part is "*", "5", or "1-30"
+	var lo, hi int
+	if part == "*" {
+		lo, hi = min, max
+	} else if idx := indexOf(part, '-'); idx >= 0 {
+		var okLo, okHi bool
+		lo, okLo = atoi(part[:idx])
+		hi, okHi = atoi(part[idx+1:])
+		if !okLo || !okHi {
+			return false
+		}
+	} else {
+		v, ok := atoi(part)
+		if !ok {
+			return false
+		}
+		lo, hi = v, v
+	}
+
+	// Check if value falls in [lo, hi] at the given step.
+	if value < lo || value > hi {
+		return false
+	}
+	return (value-lo)%step == 0
+}
+
+// splitComma splits a string by commas without allocating for the common
+// single-element case.
+func splitComma(s string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(parts, s[start:])
+}
+
+// indexOf returns the index of the first occurrence of c in s, or -1.
+func indexOf(s string, c byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
+}
+
+// atoi parses a non-negative integer without importing strconv.
+func atoi(s string) (int, bool) {
+	if len(s) == 0 {
+		return 0, false
+	}
+	n := 0
+	for _, c := range []byte(s) {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
 }
 
 // --- Webhook Trigger ---

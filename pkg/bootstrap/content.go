@@ -56,6 +56,7 @@ preamble: |
   - bizzy-dev.app_development — How to build apps: app.yaml, JS tools, prompts, workflows
   - bizzy-dev.server_testing — How to start/stop the server, test apps, debug, verify via API
   - bizzy-dev.new_app — Step-by-step workflow: create a new app, test it, iterate until working
+  - bizzy-dev.flow_engine — Visual DAG workflows: node types, msg convention, triggers, REST API, function node
 
 tags:
   - devops

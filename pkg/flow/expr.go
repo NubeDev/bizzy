@@ -21,8 +21,9 @@ func evalExpr(expression string, env map[string]any, rt *apps.JSRuntime) (any, e
 }
 
 // evalCondition evaluates an expression and returns whether the condition edge should fire.
+// The value may be a msg — extracts payload for the "value" variable.
 func evalCondition(condition string, value any) bool {
-	env := map[string]any{"value": value}
+	env := map[string]any{"value": MsgPayload(value)}
 	result, err := evalExpr(condition, env, nil)
 	if err != nil {
 		return false
@@ -32,12 +33,31 @@ func evalCondition(condition string, value any) bool {
 }
 
 // buildExprEnv creates the environment for expression evaluation.
-// Input port values are top-level keys, flow variables are under "vars".
+// Follows the Node-RED msg convention:
+//
+//	msg     — the full msg object (payload, topic, _msgid, custom props)
+//	payload — msg.payload (the main data)
+//	input   — alias for payload (backward compat: "input.value > 5" still works)
+//	topic   — msg.topic
+//	vars    — flow-level variables
 func buildExprEnv(inputs map[string]any, vars map[string]any) map[string]any {
-	env := make(map[string]any, len(inputs)+1)
-	for k, v := range inputs {
-		env[k] = v
+	env := make(map[string]any)
+
+	if msg, ok := inputs["input"]; ok {
+		env["msg"] = msg
+		payload := MsgPayload(msg)
+		env["payload"] = payload
+		env["input"] = payload // backward compat
+		env["topic"] = MsgTopic(msg)
 	}
+
+	// Multi-input nodes: expose other ports directly.
+	for k, v := range inputs {
+		if k != "input" {
+			env[k] = v
+		}
+	}
+
 	if vars != nil {
 		env["vars"] = vars
 	}

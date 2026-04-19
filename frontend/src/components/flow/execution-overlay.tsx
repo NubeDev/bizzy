@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { useFlowRun, useApproveNode, useRejectNode } from '@/hooks/use-flows'
+import { useApproveNode, useRejectNode } from '@/hooks/use-flows'
 import type { FlowRun, FlowRunStatus, NodeState } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { X, CheckCircle, XCircle, Loader2, Clock, Ban, ChevronRight } from 'lucide-react'
 
 interface ExecutionOverlayProps {
-  runId: string | null
+  run?: FlowRun
   onClose: () => void
 }
 
@@ -18,13 +18,12 @@ const statusConfig: Record<FlowRunStatus, { label: string; color: string; icon: 
   cancelled: { label: 'Cancelled', color: 'text-muted-foreground', icon: <Ban className="w-3.5 h-3.5" /> },
 }
 
-export function ExecutionOverlay({ runId, onClose }: ExecutionOverlayProps) {
-  const { data: run } = useFlowRun(runId || '')
+export function ExecutionOverlay({ run, onClose }: ExecutionOverlayProps) {
   const approve = useApproveNode()
   const reject = useRejectNode()
   const [expandedNode, setExpandedNode] = useState<string | null>(null)
 
-  if (!runId || !run) return null
+  if (!run) return null
 
   const config = statusConfig[run.status]
 

@@ -5,6 +5,7 @@ package flow
 
 import (
 	"errors"
+	"sync"
 	"time"
 )
 
@@ -131,7 +132,12 @@ func (f *FlowDef) TriggerConfig() map[string]any {
 // --- Flow Run (execution state) ---
 
 // FlowRun tracks a single execution of a flow.
+//
+// The mu mutex protects NodeStates and Variables from concurrent access.
+// All reads/writes to these maps must go through the accessor methods
+// (GetNodeState, SetNodeState, etc.) or hold the lock directly.
 type FlowRun struct {
+	mu          sync.RWMutex         `json:"-" gorm:"-"`
 	ID          string               `json:"id" gorm:"primaryKey"`
 	FlowID      string               `json:"flow_id" gorm:"index"`
 	FlowVersion int                  `json:"flow_version"`
@@ -143,9 +149,63 @@ type FlowRun struct {
 	Variables   map[string]any       `json:"variables,omitempty" gorm:"serializer:json"`
 	Error       string               `json:"error,omitempty"`
 	UserID      string               `json:"user_id" gorm:"index"`
+	DebugLog    []DebugEntry         `json:"debug_log,omitempty" gorm:"serializer:json"`
 	ReplyTo     *ReplyInfo           `json:"reply_to,omitempty" gorm:"serializer:json"`
 	CreatedAt   time.Time            `json:"created_at"`
 	FinishedAt  *time.Time           `json:"finished_at,omitempty"`
+
+	// resumeCh is used by the execute loop to wait for approval/rejection.
+	// ApproveNode/RejectNode write to this channel instead of spawning a
+	// new execute goroutine, preserving single-writer semantics.
+	resumeCh chan approvalResult `json:"-" gorm:"-"`
+}
+
+// approvalResult carries the outcome of an approval decision back to the
+// execute loop that is blocked waiting on run.resumeCh.
+type approvalResult struct {
+	NodeID string
+	Output any // PortOutput with port "approved" or "rejected"
+}
+
+// GetNodeState returns the state for a node (safe for concurrent use).
+func (r *FlowRun) GetNodeState(nodeID string) NodeState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.NodeStates[nodeID]
+}
+
+// SetNodeState sets the state for a node (safe for concurrent use).
+func (r *FlowRun) SetNodeState(nodeID string, state NodeState) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.NodeStates[nodeID] = state
+}
+
+// MergeNodeStates copies all entries from src into NodeStates under the lock.
+// Used by foreach to merge iteration results back into the run.
+func (r *FlowRun) MergeNodeStates(src map[string]NodeState) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k, v := range src {
+		r.NodeStates[k] = v
+	}
+}
+
+// SetVariable sets a flow variable (safe for concurrent use).
+func (r *FlowRun) SetVariable(key string, value any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.Variables == nil {
+		r.Variables = make(map[string]any)
+	}
+	r.Variables[key] = value
+}
+
+// AppendDebug adds a debug entry to the run log (safe for concurrent use).
+func (r *FlowRun) AppendDebug(entry DebugEntry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.DebugLog = append(r.DebugLog, entry)
 }
 
 // FlowRunStatus represents the state of a flow run.
@@ -184,6 +244,15 @@ const (
 	NodeSkipped   NodeStatus = "skipped"
 	NodeWaiting   NodeStatus = "waiting" // approval gate
 )
+
+// DebugEntry records a single debug node observation within a flow run.
+type DebugEntry struct {
+	Timestamp string `json:"ts"`
+	NodeID    string `json:"node_id"`
+	Label     string `json:"label"`
+	MsgID     string `json:"msg_id"`
+	Value     any    `json:"value"`
+}
 
 // ReplyInfo describes where to send the flow result (e.g. Slack thread).
 type ReplyInfo struct {

@@ -1,13 +1,19 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { useFlow, useUpdateFlow, useValidateFlow, useNodeTypes, useLatestFlowRun } from '@/hooks/use-flows'
+import { useFlow, useUpdateFlow, useValidateFlow, useNodeTypes } from '@/hooks/use-flows'
+import { useFlowRunWS } from '@/hooks/use-flow-run-ws'
 import { FlowCanvas, type FlowCanvasHandle } from '@/components/flow/canvas'
 import { NodePalette } from '@/components/flow/node-palette'
 import { NodeConfig } from '@/components/flow/node-config'
-import { FlowToolbar, type PollInterval } from '@/components/flow/flow-toolbar'
+import { FlowToolbar } from '@/components/flow/flow-toolbar'
 import { ExecutionOverlay, useNodeStatesForCanvas } from '@/components/flow/execution-overlay'
+import { DebugPanel } from '@/components/flow/debug-panel'
+import { Bug, Settings2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { Node } from '@xyflow/react'
 import type { NodeTypeDef } from '@/lib/types'
+
+type RightTab = 'config' | 'debug'
 
 export function FlowEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,11 +26,38 @@ export function FlowEditorPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [dirty, setDirty] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [pollInterval, setPollInterval] = useState<PollInterval>(5000)
+  const [rightTab, setRightTab] = useState<RightTab | null>(null)
 
-  // Poll latest run for this flow.
-  const { run: latestRun, runId: latestRunId, totalRuns } = useLatestFlowRun(id || '', pollInterval)
+  // Live run state via WebSocket (replaces polling).
+  const { run: latestRun, runId: latestRunId, totalRuns, wsStatus } = useFlowRunWS(id || '')
   const nodeStates = useNodeStatesForCanvas(latestRun)
+
+  // Accumulate debug entries across runs (persists until user clears).
+  const [debugEntries, setDebugEntries] = useState<import('@/lib/types').DebugEntry[]>([])
+  const prevDebugLenRef = useRef(0)
+  useEffect(() => {
+    const runLog = latestRun?.debug_log || []
+    if (runLog.length > prevDebugLenRef.current) {
+      const newEntries = runLog.slice(prevDebugLenRef.current)
+      setDebugEntries((prev) => [...prev, ...newEntries])
+    }
+    prevDebugLenRef.current = runLog.length
+  }, [latestRun?.debug_log])
+  // Reset tracking when run changes.
+  const prevRunIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (latestRunId && latestRunId !== prevRunIdRef.current) {
+      prevDebugLenRef.current = 0
+      // Load initial debug log from the new run.
+      const runLog = latestRun?.debug_log || []
+      if (runLog.length > 0) {
+        setDebugEntries((prev) => [...prev, ...runLog])
+        prevDebugLenRef.current = runLog.length
+      }
+    }
+    prevRunIdRef.current = latestRunId
+  }, [latestRunId, latestRun?.debug_log])
+  const clearDebug = useCallback(() => setDebugEntries([]), [])
 
   const nodeTypeDefs = useMemo(() => {
     const map: Record<string, NodeTypeDef> = {}
@@ -35,6 +68,12 @@ export function FlowEditorPage() {
     }
     return map
   }, [nodeTypeCatalog])
+
+  // When a node is selected, auto-open the config tab.
+  const handleNodeSelect = useCallback((node: Node | null) => {
+    setSelectedNode(node)
+    if (node) setRightTab('config')
+  }, [])
 
   const handleSave = useCallback(async () => {
     if (!flow || !id || !canvasRef.current) return
@@ -99,6 +138,8 @@ export function FlowEditorPage() {
     )
   }
 
+  const showRightPanel = rightTab !== null
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 4rem)' }}>
       <FlowToolbar
@@ -110,8 +151,7 @@ export function FlowEditorPage() {
         saving={updateFlow.isPending}
         validationErrors={validationErrors}
         dirty={dirty}
-        pollInterval={pollInterval}
-        onPollIntervalChange={setPollInterval}
+        wsStatus={wsStatus}
         totalRuns={totalRuns}
         latestRunStatus={latestRun?.status}
       />
@@ -125,24 +165,87 @@ export function FlowEditorPage() {
           initialEdges={flow.edges || []}
           nodeTypeDefs={nodeTypeDefs}
           nodeStates={nodeStates}
-          onNodeSelect={setSelectedNode}
+          onNodeSelect={handleNodeSelect}
           onDirty={() => setDirty(true)}
         />
 
-        {selectedNode && (
-          <NodeConfig
-            node={selectedNode}
-            nodeTypeDefs={nodeTypeDefs}
-            onChange={handleNodeConfigChange}
-            onClose={() => setSelectedNode(null)}
-          />
-        )}
+        {/* Right sidebar: tab bar + content */}
+        <div className="flex shrink-0">
+          {/* Tab bar (always visible) */}
+          <div className="flex flex-col items-center gap-1 py-2 px-1 border-l border-border bg-card">
+            <TabButton
+              active={rightTab === 'config'}
+              onClick={() => setRightTab(rightTab === 'config' ? null : 'config')}
+              title="Node Config"
+              badge={selectedNode ? 1 : 0}
+            >
+              <Settings2 className="w-4 h-4" />
+            </TabButton>
+            <TabButton
+              active={rightTab === 'debug'}
+              onClick={() => setRightTab(rightTab === 'debug' ? null : 'debug')}
+              title="Debug"
+              badge={debugEntries.length}
+            >
+              <Bug className="w-4 h-4" />
+            </TabButton>
+          </div>
+
+          {/* Panel content */}
+          {showRightPanel && (
+            <>
+              {rightTab === 'config' && (
+                <NodeConfig
+                  node={selectedNode}
+                  nodeTypeDefs={nodeTypeDefs}
+                  onChange={handleNodeConfigChange}
+                  onClose={() => setRightTab(null)}
+                />
+              )}
+              {rightTab === 'debug' && (
+                <DebugPanel entries={debugEntries} onClear={clearDebug} />
+              )}
+            </>
+          )}
+        </div>
 
         <ExecutionOverlay
-          runId={latestRunId}
+          run={latestRun}
           onClose={() => {}}
         />
       </div>
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  title,
+  badge,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  title: string
+  badge?: number
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={cn(
+        'relative p-1.5 rounded transition-colors',
+        active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+      )}
+    >
+      {children}
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center text-[8px] font-mono bg-amber-500 text-white rounded-full px-0.5">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </button>
   )
 }

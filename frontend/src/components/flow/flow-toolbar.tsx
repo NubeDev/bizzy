@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Save, CheckCircle, LayoutDashboard, ChevronLeft, Pencil, Radio } from 'lucide-react'
+import { Save, CheckCircle, LayoutDashboard, ChevronLeft, Pencil, Radio, Wifi, WifiOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-export type PollInterval = 1000 | 3000 | 5000 | 10000 | 30000 | false
+import type { WSStatus } from '@/hooks/use-event-ws'
 
 interface FlowToolbarProps {
   flowName: string
@@ -14,20 +13,10 @@ interface FlowToolbarProps {
   saving: boolean
   validationErrors?: string[]
   dirty: boolean
-  pollInterval: PollInterval
-  onPollIntervalChange: (interval: PollInterval) => void
+  wsStatus: WSStatus
   totalRuns?: number
   latestRunStatus?: string
 }
-
-const POLL_OPTIONS: { label: string; value: PollInterval }[] = [
-  { label: '1s', value: 1000 },
-  { label: '3s', value: 3000 },
-  { label: '5s', value: 5000 },
-  { label: '10s', value: 10000 },
-  { label: '30s', value: 30000 },
-  { label: 'Off', value: false },
-]
 
 export function FlowToolbar({
   flowName,
@@ -38,8 +27,7 @@ export function FlowToolbar({
   saving,
   validationErrors,
   dirty,
-  pollInterval,
-  onPollIntervalChange,
+  wsStatus,
   totalRuns,
   latestRunStatus,
 }: FlowToolbarProps) {
@@ -101,29 +89,25 @@ export function FlowToolbar({
 
       <div className="flex-1" />
 
-      {/* Live polling status */}
+      {/* Live WS status */}
       <div className="flex items-center gap-1.5 mr-2">
-        {pollInterval !== false && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <Radio className={cn('w-3 h-3', latestRunStatus === 'completed' ? 'text-green-400' : latestRunStatus === 'running' ? 'text-blue-400 animate-pulse' : 'text-muted-foreground')} />
-            {totalRuns !== undefined && <span>{totalRuns} runs</span>}
-          </div>
-        )}
-        <select
-          value={pollInterval === false ? 'off' : String(pollInterval)}
-          onChange={(e) => {
-            const v = e.target.value
-            onPollIntervalChange(v === 'off' ? false : (Number(v) as PollInterval))
-          }}
-          className="px-1.5 py-0.5 text-[10px] bg-background border border-border rounded text-muted-foreground"
-          title="Poll interval for live node values"
-        >
-          {POLL_OPTIONS.map((opt) => (
-            <option key={String(opt.value)} value={opt.value === false ? 'off' : String(opt.value)}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          {wsStatus === 'connected' ? (
+            <span title="Live (WebSocket connected)"><Wifi className="w-3 h-3 text-green-400" /></span>
+          ) : wsStatus === 'connecting' ? (
+            <span title="Connecting..."><Wifi className="w-3 h-3 text-yellow-400 animate-pulse" /></span>
+          ) : (
+            <span title="Disconnected"><WifiOff className="w-3 h-3 text-red-400" /></span>
+          )}
+          {latestRunStatus && (
+            <Radio className={cn('w-3 h-3',
+              latestRunStatus === 'completed' ? 'text-green-400' :
+              latestRunStatus === 'running' ? 'text-blue-400 animate-pulse' :
+              'text-muted-foreground'
+            )} />
+          )}
+          {totalRuns !== undefined && <span>{totalRuns} runs</span>}
+        </div>
       </div>
 
       {/* Validation errors */}

@@ -3,14 +3,13 @@ package api
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 
 	"github.com/NubeDev/bizzy/pkg/airunner"
 	"github.com/NubeDev/bizzy/pkg/claude"
 	"github.com/NubeDev/bizzy/pkg/models"
 	"github.com/NubeDev/bizzy/pkg/services"
+	"github.com/NubeDev/bizzy/pkg/ws"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 )
 
 // qaStartRequest is the first message the client sends to start a QA flow.
@@ -70,24 +69,12 @@ type qaEvent struct {
 //  9. Server sends:    {"type":"done","duration_ms":...,"cost_usd":...}
 // 10. Server closes connection.
 func (a *API) runQAWS(c *gin.Context) {
-	token := c.Query("token")
-
-	var user models.User
-
-	if token == "" || token == "dev" {
-		// Dev mode: use the first user (same as REST auth middleware).
-		if err := a.DB.First(&user).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "no users exist"})
-			return
-		}
-	} else {
-		if err := a.DB.Where("token = ?", token).First(&user).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
-		}
+	user, ok := ws.AuthFromQuery(c, a.DB)
+	if !ok {
+		return
 	}
 
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := ws.Upgrade(c.Writer, c.Request)
 	if err != nil {
 		log.Printf("[qa] ws upgrade: %v", err)
 		return
@@ -214,17 +201,10 @@ func (a *API) runQAWS(c *gin.Context) {
 					CostUSD:         claudeResult.CostUSD,
 				},
 			})
-
-			conn.WriteMessage(
-				websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-			)
-			return
+			return // conn.Close() in defer sends close frame
 
 		case "result":
 			// Tool returned a final result (no Claude streaming needed).
-			// Send it directly to the client as a "text" event with the JSON,
-			// then close cleanly.
 			resultJSON, _ := json.Marshal(result)
 			conn.WriteJSON(qaEvent{
 				Type:      "text",
@@ -235,11 +215,7 @@ func (a *API) runQAWS(c *gin.Context) {
 				Type:      "done",
 				SessionID: sessionID,
 			})
-			conn.WriteMessage(
-				websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-			)
-			return
+			return // conn.Close() in defer sends close frame
 
 		default:
 			sendQAError(conn, sessionID, "unexpected tool response type: "+resultType)
@@ -279,6 +255,6 @@ func mapToQAEvent(result map[string]any, ev *qaEvent) {
 	}
 }
 
-func sendQAError(conn *websocket.Conn, sessionID, msg string) {
+func sendQAError(conn *ws.Conn, sessionID, msg string) {
 	conn.WriteJSON(qaEvent{Type: "error", SessionID: sessionID, Error: msg})
 }

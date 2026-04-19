@@ -179,9 +179,10 @@ func (a *API) SetupRouter() *gin.Engine {
 	authed.GET("/users/me/preferences", a.getUserPreferences)
 	authed.PUT("/users/me/preferences", a.updateUserPreferences)
 
-	// Agent WebSocket endpoints (auth via ?token= query param).
+	// WebSocket endpoints (auth via ?token= query param).
 	r.GET("/api/agents/run", a.runAgentWS)
 	r.GET("/api/agents/qa", a.runQAWS)
+	r.GET("/api/events/ws", a.handleEventWS)
 
 	// Admin: provider config + reload.
 	admin.GET("/api/settings/providers", a.getProviderConfig)
@@ -201,7 +202,6 @@ func (a *API) SetupRouter() *gin.Engine {
 	if a.CmdRouter != nil {
 		authed.POST("/api/command", a.handleCommand)
 		authed.GET("/api/command/help", a.handleCommandHelp)
-		authed.GET("/api/events/stream", a.handleEventStream)
 
 		// Webhook inbound endpoint.
 		if a.WebhookHandler != nil {

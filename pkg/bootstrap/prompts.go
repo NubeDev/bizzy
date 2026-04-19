@@ -33,6 +33,7 @@ func List() []Prompt {
 		promptAppDevelopment,
 		promptServerTesting,
 		promptNewApp,
+		promptFlowEngine,
 		// Builder / AI prompts
 		promptToolNaming,
 		promptUIReference,
